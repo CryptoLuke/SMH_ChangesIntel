@@ -1,0 +1,10 @@
+{
+  "name": "isc-change-intel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root build/start orchestration for Railway/Render-style single-command deploys",
+  "scripts": {
+    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run build --prefix server",
+    "start": "npm start --prefix server"
+  }
+}
