@@ -3,8 +3,8 @@ import type { RawObject, SessionToken, TenantConnection } from "./types.js";
 const PAGE_SIZE = 250;
 
 /**
- * Pages through any ISC v3 list endpoint using offset/limit, e.g.
- * fetchAll(conn, token, "/v3/sources") or fetchAll(conn, token, "/v3/access-profiles").
+ * Pages through any ISC v1 list endpoint using offset/limit, e.g.
+ * fetchAll(conn, token, "/sources/v1") or fetchAll(conn, token, "/roles/v1").
  */
 export async function fetchAll(
   conn: TenantConnection,
@@ -37,15 +37,14 @@ export async function fetchAll(
 }
 
 /**
- * Pages through the ISC Search API (POST /v3/search) against a given index.
- * Used for identities, which — unlike sources/roles/access-profiles/workflows
- * — have no plain REST list endpoint; Search is SailPoint's documented way
- * to bulk-retrieve them. See:
- * https://developer.sailpoint.com/discuss/t/a-complete-guide-to-retrieving-identity-data-via-the-identity-security-cloud-api/108723
- *
- * Sorts by id and pages with `searchAfter` rather than `offset` — offset
- * pagination on this endpoint stops working past 10,000 results, but
- * searchAfter has no such ceiling, so this scales to any tenant size.
+ * Pages through the ISC Search API (POST /search/v1) against a given index.
+ * Used for object types whose plain REST list endpoint hits the platform's
+ * documented 10,000-record offset-pagination ceiling (entitlements, in
+ * large tenants) or has no list endpoint at all. Per SailPoint's own Search
+ * API docs: "By default, you can page a maximum of 10,000 search result
+ * records. To page past 10,000 records, you can use searchAfter paging."
+ * That's exactly what this does — sorts by id and pages with searchAfter
+ * rather than offset, so it scales to any tenant size.
  */
 export async function fetchAllViaSearch(
   conn: TenantConnection,
@@ -64,7 +63,7 @@ export async function fetchAllViaSearch(
     };
     if (searchAfter) body.searchAfter = searchAfter;
 
-    const res = await fetch(`${conn.baseUrl}/v3/search?limit=${PAGE_SIZE}`, {
+    const res = await fetch(`${conn.baseUrl}/search/v1?limit=${PAGE_SIZE}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token.accessToken}`,

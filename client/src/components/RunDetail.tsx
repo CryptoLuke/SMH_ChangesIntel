@@ -5,6 +5,7 @@ import { OBJECT_TYPE_LABELS } from "../types";
 interface Props {
   run: RunReport;
   onRepeat: (run: RunReport) => void;
+  onRename: (id: string, name: string) => void;
 }
 
 function formatTimestamp(iso: string): string {
@@ -47,16 +48,52 @@ function ChangeRow({ change }: { change: ChangeRecord }) {
   );
 }
 
-export function RunDetail({ run, onRepeat }: Props) {
+export function RunDetail({ run, onRepeat, onRename }: Props) {
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(run.name ?? "");
   const totalChanges = run.reports.reduce((sum, r) => sum + r.changes.length, 0);
+
+  function commitName() {
+    onRename(run.id, nameValue);
+    setEditingName(false);
+  }
 
   return (
     <div className="main-inner">
       <div className="run-header">
-        <h1>{run.tenant}</h1>
+        {editingName ? (
+          <input
+            className="run-title-input"
+            value={nameValue}
+            autoFocus
+            placeholder={run.tenant}
+            onChange={(e) => setNameValue(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              if (e.key === "Escape") {
+                setNameValue(run.name ?? "");
+                setEditingName(false);
+              }
+            }}
+          />
+        ) : (
+          <h1>
+            {run.name || run.tenant}{" "}
+            <button
+              className="rename-icon-button rename-icon-button-inline"
+              onClick={() => setEditingName(true)}
+              title="Rename this run"
+              aria-label="Rename this run"
+            >
+              ✎
+            </button>
+          </h1>
+        )}
         <span className="timestamp">{formatTimestamp(run.startedAt)}</span>
       </div>
       <div className="run-baseline">
+        {run.name ? `${run.tenant} · ` : ""}
         {totalChanges} change{totalChanges === 1 ? "" : "s"} across {run.scope.length} object type
         {run.scope.length === 1 ? "" : "s"}
         {run.lookbackDays ? ` · ${run.lookbackDays}d lookback` : ""}

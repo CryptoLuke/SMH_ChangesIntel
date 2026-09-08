@@ -3,7 +3,7 @@ import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { NewRunForm, type RunPrefill } from "./components/NewRunForm";
 import { RunDetail } from "./components/RunDetail";
-import { listRuns, getRun } from "./api";
+import { listRuns, getRun, renameRun } from "./api";
 import type { RunReport, RunSummary } from "./types";
 
 type View = { kind: "new-run" } | { kind: "run"; runId: string };
@@ -64,6 +64,16 @@ export default function App() {
     setView({ kind: "new-run" });
   }
 
+  async function handleRenameRun(id: string, name: string) {
+    try {
+      const updated = await renameRun(id, name);
+      await refreshRuns();
+      if (selectedRun?.id === id) setSelectedRun(updated);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to rename run");
+    }
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -71,6 +81,7 @@ export default function App() {
         selectedRunId={view.kind === "run" ? view.runId : null}
         onSelectRun={(id) => setView({ kind: "run", runId: id })}
         onNewRun={handleNewRun}
+        onRenameRun={handleRenameRun}
       />
       <main className="main">
         {loadError && <div className="form-error">{loadError}</div>}
@@ -79,7 +90,7 @@ export default function App() {
         )}
         {view.kind === "run" &&
           (selectedRun ? (
-            <RunDetail run={selectedRun} onRepeat={handleRepeatRun} />
+            <RunDetail key={selectedRun.id} run={selectedRun} onRepeat={handleRepeatRun} onRename={handleRenameRun} />
           ) : (
             <div className="main-inner empty-state">Loading run...</div>
           ))}

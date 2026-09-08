@@ -126,6 +126,43 @@ button {
   font-weight: 500;
 }
 
+.run-history-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rename-icon-button {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0;
+  line-height: 1;
+}
+
+.run-history-item:hover .rename-icon-button {
+  opacity: 1;
+}
+
+.rename-icon-button:hover {
+  color: var(--accent);
+}
+
+.run-rename-input {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  border: 1px solid var(--accent);
+  background: white;
+  padding: 3px 6px;
+  width: 100%;
+}
+
 .run-history-item .meta {
   font-size: 11px;
   color: var(--ink-muted);
@@ -172,6 +209,11 @@ button {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 6px;
+}
+
+.field-label-optional {
+  font-weight: 400;
+  color: var(--ink-muted);
 }
 
 .field-hint {
@@ -264,6 +306,26 @@ button {
   font-size: 20px;
   font-weight: 500;
   margin: 0;
+}
+
+.rename-icon-button-inline {
+  font-size: 14px;
+  opacity: 0.4;
+}
+
+.rename-icon-button-inline:hover {
+  opacity: 1;
+}
+
+.run-title-input {
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+  border: 1px solid var(--accent);
+  background: white;
+  padding: 2px 8px;
+  min-width: 240px;
 }
 
 .run-header .timestamp {

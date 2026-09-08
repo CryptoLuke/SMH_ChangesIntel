@@ -39,6 +39,7 @@ export interface RunReport {
   lookbackDays: number | null;
   scope: ObjectType[];
   reports: DiffReport[];
+  name?: string;
 }
 
 export interface RunSummary {
@@ -47,6 +48,7 @@ export interface RunSummary {
   startedAt: string;
   scope: ObjectType[];
   totalChanges: number;
+  name?: string;
 }
 
 export const ALL_OBJECT_TYPES: ObjectType[] = [

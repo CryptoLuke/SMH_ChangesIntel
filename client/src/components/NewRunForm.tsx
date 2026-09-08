@@ -30,6 +30,7 @@ function loadDefaultBaseUrl(prefill?: RunPrefill): string {
 
 export function NewRunForm({ onRunComplete, prefill }: Props) {
   const [baseUrl, setBaseUrl] = useState(() => loadDefaultBaseUrl(prefill));
+  const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [scope, setScope] = useState<ObjectType[]>(
@@ -66,6 +67,7 @@ export function NewRunForm({ onRunComplete, prefill }: Props) {
         clientSecret,
         scope,
         lookbackDays: lookbackDays ? Number(lookbackDays) : undefined,
+        name: name.trim() || undefined,
       });
 
       // Remember the base URL for next time — it's just a hostname, not a
@@ -109,6 +111,25 @@ export function NewRunForm({ onRunComplete, prefill }: Props) {
             autoComplete="off"
           />
           <div className="field-hint">Remembered on this browser after your first run — edit anytime.</div>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label" htmlFor="runName">
+            Run name <span className="field-label-optional">(optional)</span>
+          </label>
+          <input
+            id="runName"
+            className="field-input"
+            style={{ fontFamily: "var(--sans)" }}
+            placeholder="e.g. Baseline, Investigate"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="off"
+          />
+          <div className="field-hint">
+            Shows in the run history instead of the tenant name — handy for telling runs apart at
+            a glance. Can be changed later too.
+          </div>
         </div>
 
         <div className="two-col">

@@ -76,4 +76,7 @@ export interface RunReport {
   lookbackDays: number | null;
   scope: ObjectType[];
   reports: DiffReport[];
+  /** Optional user-given label (e.g. "Baseline", "Investigate") — defaults
+   *  to the tenant name in the UI when unset. */
+  name?: string;
 }

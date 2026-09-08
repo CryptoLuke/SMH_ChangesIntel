@@ -30,6 +30,7 @@ export interface RunSummary {
   startedAt: string;
   scope: RunReport["scope"];
   totalChanges: number;
+  name?: string;
 }
 
 export async function listRuns(tenant?: string): Promise<RunSummary[]> {
@@ -55,6 +56,7 @@ export async function listRuns(tenant?: string): Promise<RunSummary[]> {
       startedAt: r.startedAt,
       scope: r.scope,
       totalChanges: r.reports.reduce((sum, rep) => sum + rep.changes.length, 0),
+      name: r.name,
     }));
 }
 
@@ -68,6 +70,28 @@ export async function getRun(id: string): Promise<RunReport | null> {
   const match = files.find((f) => f.includes(id));
   if (!match) return null;
   return JSON.parse(await readFile(path.join(RUNS_ROOT, match), "utf-8")) as RunReport;
+}
+
+/**
+ * Updates a run's display name in place. The file's name itself (tenant +
+ * timestamp + id) never changes — only the `name` field inside it — so
+ * this is a read-modify-write against the same file, not a rename on disk.
+ */
+export async function renameRun(id: string, name: string): Promise<RunReport | null> {
+  let files: string[];
+  try {
+    files = await readdir(RUNS_ROOT);
+  } catch {
+    return null;
+  }
+  const match = files.find((f) => f.includes(id));
+  if (!match) return null;
+
+  const filePath = path.join(RUNS_ROOT, match);
+  const run = JSON.parse(await readFile(filePath, "utf-8")) as RunReport;
+  const updated: RunReport = { ...run, name: name.trim() || undefined };
+  await writeFile(filePath, JSON.stringify(updated, null, 2), "utf-8");
+  return updated;
 }
 
 export async function listTenants(): Promise<string[]> {

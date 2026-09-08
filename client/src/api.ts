@@ -14,6 +14,7 @@ export interface TriggerRunInput {
   clientSecret: string;
   scope: ObjectType[];
   lookbackDays?: number;
+  name?: string;
 }
 
 /**
@@ -45,4 +46,13 @@ export async function getRun(id: string): Promise<RunReport> {
 export async function listTenants(): Promise<string[]> {
   const res = await fetch("/api/runs/tenants");
   return handle<string[]>(res);
+}
+
+export async function renameRun(id: string, name: string): Promise<RunReport> {
+  const res = await fetch(`/api/runs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return handle<RunReport>(res);
 }

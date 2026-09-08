@@ -3,7 +3,7 @@ import { getAccessToken } from "../engine/auth.js";
 import { collectObjectType } from "../engine/collectors/registry.js";
 import { saveSnapshot, getBaselineAndCurrent } from "../engine/snapshotStore.js";
 import { diffObjectType } from "../engine/diffEngine.js";
-import { saveRun, listRuns, getRun, listTenants } from "../engine/runStore.js";
+import { saveRun, listRuns, getRun, listTenants, renameRun } from "../engine/runStore.js";
 import type { DiffReport, ObjectType, Snapshot, TenantConnection } from "../engine/types.js";
 
 export const runsRouter = Router();
@@ -14,6 +14,7 @@ interface TriggerRunBody {
   clientSecret: string;
   scope: ObjectType[];
   lookbackDays?: number;
+  name?: string;
 }
 
 /**
@@ -80,6 +81,7 @@ runsRouter.post("/", async (req, res) => {
       lookbackDays: lookbackDays ?? null,
       scope: body.scope,
       reports,
+      name: body.name?.trim() || undefined,
     });
     res.status(201).json(run);
   } catch (err) {
@@ -102,4 +104,14 @@ runsRouter.get("/:id", async (req, res) => {
   const run = await getRun(req.params.id);
   if (!run) return res.status(404).json({ error: "Run not found" });
   res.json(run);
+});
+
+runsRouter.patch("/:id", async (req, res) => {
+  const name = (req.body as { name?: unknown }).name;
+  if (typeof name !== "string") {
+    return res.status(400).json({ error: "name (string) is required" });
+  }
+  const updated = await renameRun(req.params.id, name);
+  if (!updated) return res.status(404).json({ error: "Run not found" });
+  res.json(updated);
 });

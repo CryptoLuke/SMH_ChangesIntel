@@ -9,15 +9,19 @@ import { fetchAll, fetchAllViaSearch } from "../iscClient.js";
  *   - List sources:         GET /sources/v1          (developer.sailpoint.com/docs/api/list-sources-v-1)
  *   - List access profiles: GET /access-profiles/v1   (developer.sailpoint.com/docs/api/list-access-profiles-v-1)
  *   - List roles:           GET /roles/v1             (developer.sailpoint.com/docs/api/list-roles-v-1)
- *   - List entitlements:    GET /entitlements/v1      (developer.sailpoint.com/docs/api/list-entitlements-v-1)
  *   - List workflows:       GET /workflows/v1         (developer.sailpoint.com/docs/api/list-workflows-v-1)
  *   - List identities:      GET /identities/v1        (developer.sailpoint.com/docs/api/list-identities-v-1)
  *
- * All are plain paginated REST lists (offset/limit), so every type here uses
- * the "list" collector. The "search" collector (fetchAllViaSearch, hitting
- * POST /search against an ISC search index) is kept available for object
- * types that don't have a dedicated list endpoint — none currently in scope
- * need it, since /identities/v1 covers identities directly.
+ * Entitlements are the exception: /entitlements/v1's offset pagination hits
+ * a hard ceiling around 10,000 (confirmed directly — a live tenant with
+ * >10k entitlements got a 400 at offset=10000), the same "from+size" window
+ * limit Elasticsearch-backed endpoints commonly impose. "entitlements" is
+ * one of the officially documented Search API indices (alongside
+ * identities, roles, accessprofiles, events, accountactivities —
+ * developer.sailpoint.com Search API docs), and that API's searchAfter
+ * pagination has no such ceiling — same mechanism fetchAllViaSearch already
+ * uses. So entitlements use "search" here while everything else uses the
+ * plain REST list.
  */
 type CollectorDescriptor = { kind: "list"; path: string } | { kind: "search"; index: string };
 
@@ -25,7 +29,7 @@ const COLLECTORS: Record<ObjectType, CollectorDescriptor> = {
   sources: { kind: "list", path: "/sources/v1" },
   "access-profiles": { kind: "list", path: "/access-profiles/v1" },
   roles: { kind: "list", path: "/roles/v1" },
-  entitlements: { kind: "list", path: "/entitlements/v1" },
+  entitlements: { kind: "search", index: "entitlements" },
   workflows: { kind: "list", path: "/workflows/v1" },
   identities: { kind: "list", path: "/identities/v1" },
 };
