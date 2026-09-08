@@ -13,18 +13,30 @@ const IGNORED_TOP_LEVEL_FIELDS: Partial<Record<ObjectType, Set<string>>> = {
   // happened), independent of whether any real attribute changed. Comparing
   // them produces "modified" noise on essentially every run.
   identities: new Set(["lastRefresh", "modified"]),
+  // Same idea for sources: `modified` bumps on every health-check cycle,
+  // observed directly in a live tenant (a source with zero real config
+  // change still showed a changed `modified` timestamp every run).
+  sources: new Set(["modified"]),
 };
 
 /**
- * Nested keys stripped at any depth before diffing. "triggerSnapshots" was
- * observed directly in a live tenant's identity `attributes` payload — not
- * documented — as SailPoint's own bookkeeping when an attribute-change
- * trigger fires: it embeds a copy of the *prior* attribute values inside the
- * *new* snapshot. Left in, it produces a nonsensical diff entry (the old
- * value appearing to be "added" under a triggerSnapshots.* path). This is an
- * empirical exclusion based on what we've actually seen, flagged as such.
+ * Nested keys stripped at any depth before diffing, scoped per object type.
+ * "triggerSnapshots" was observed directly in a live tenant's identity
+ * `attributes` payload — not documented — as SailPoint's own bookkeeping
+ * when an attribute-change trigger fires: it embeds a copy of the *prior*
+ * attribute values inside the *new* snapshot, producing a nonsensical diff
+ * entry if left in.
+ *
+ * "slpt-source-diagnostics" (under a source's `connectorAttributes`) is a
+ * live connector health-check payload — healthcheckCount, a lastHealthcheck
+ * epoch, status — that updates on every health-check cycle regardless of
+ * whether the source's actual configuration changed. Also observed
+ * directly in a live tenant, not documented.
  */
-const IGNORED_NESTED_KEYS = new Set(["triggerSnapshots"]);
+const IGNORED_NESTED_KEYS: Partial<Record<ObjectType, Set<string>>> = {
+  identities: new Set(["triggerSnapshots"]),
+  sources: new Set(["slpt-source-diagnostics"]),
+};
 
 function stripTopLevel(obj: RawObject, ignore: Set<string>): RawObject {
   if (ignore.size === 0) return obj;
@@ -61,23 +73,43 @@ function nameFields(obj: RawObject): { name?: string; secondaryName?: string } {
  * field-level diffs, and makes comparison order-independent (key order
  * inside a nested object no longer matters).
  */
-function flatten(value: unknown, prefix: string, out: Record<string, unknown>): void {
+function flatten(
+  value: unknown,
+  prefix: string,
+  out: Record<string, unknown>,
+  ignoreNested: Set<string>
+): void {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     for (const key of Object.keys(value as Record<string, unknown>)) {
-      if (IGNORED_NESTED_KEYS.has(key)) continue;
+      if (ignoreNested.has(key)) continue;
       const path = prefix ? `${prefix}.${key}` : key;
-      flatten((value as Record<string, unknown>)[key], path, out);
+      flatten((value as Record<string, unknown>)[key], path, out, ignoreNested);
     }
   } else {
     out[prefix] = value;
   }
 }
 
-function fieldDiffs(before: RawObject, after: RawObject): FieldDiff[] {
+/**
+ * Comparison signature for a leaf value. Arrays get their elements sorted
+ * by serialized form before comparing — SailPoint doesn't guarantee stable
+ * ordering for reference-list fields (e.g. a role's dimensionRefs), so a
+ * pure reorder of the same elements would otherwise look like a change.
+ * This only affects equality checking; the raw value is still what's shown
+ * in the diff if a real difference is found.
+ */
+function leafSignature(value: unknown): string {
+  if (Array.isArray(value)) {
+    return JSON.stringify([...value].map((v) => JSON.stringify(v)).sort());
+  }
+  return JSON.stringify(value);
+}
+
+function fieldDiffs(before: RawObject, after: RawObject, ignoreNested: Set<string>): FieldDiff[] {
   const beforeFlat: Record<string, unknown> = {};
   const afterFlat: Record<string, unknown> = {};
-  flatten(before, "", beforeFlat);
-  flatten(after, "", afterFlat);
+  flatten(before, "", beforeFlat, ignoreNested);
+  flatten(after, "", afterFlat, ignoreNested);
   delete beforeFlat[""];
   delete afterFlat[""];
 
@@ -86,7 +118,7 @@ function fieldDiffs(before: RawObject, after: RawObject): FieldDiff[] {
   for (const key of keys) {
     const b = beforeFlat[key];
     const a = afterFlat[key];
-    if (JSON.stringify(b) !== JSON.stringify(a)) {
+    if (leafSignature(b) !== leafSignature(a)) {
       diffs.push({ field: key, before: b, after: a });
     }
   }
@@ -99,6 +131,7 @@ export function diffObjectType(
   current: Snapshot
 ): ChangeRecord[] {
   const ignoreTop = IGNORED_TOP_LEVEL_FIELDS[objectType] ?? new Set<string>();
+  const ignoreNested = IGNORED_NESTED_KEYS[objectType] ?? new Set<string>();
   const changes: ChangeRecord[] = [];
   const prevById = new Map(
     (previous?.objects ?? []).map((o) => [o.id, stripTopLevel(o, ignoreTop)])
@@ -112,7 +145,7 @@ export function diffObjectType(
       continue;
     }
     if (hashObject(prevObj) !== hashObject(obj)) {
-      const diffs = fieldDiffs(prevObj, obj);
+      const diffs = fieldDiffs(prevObj, obj, ignoreNested);
       if (diffs.length === 0) continue; // only ignored fields changed — not a real modification
       changes.push({
         objectType,

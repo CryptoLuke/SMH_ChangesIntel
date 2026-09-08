@@ -9,7 +9,7 @@ import type { RunReport } from "./types.js";
  * rationale as snapshotStore.ts — swap for Postgres alongside it later.
  */
 
-const RUNS_ROOT = path.resolve(process.cwd(), "runs");
+const RUNS_ROOT = path.resolve(process.env.DATA_DIR ?? process.cwd(), "runs");
 
 function sanitize(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9._-]/g, "_");

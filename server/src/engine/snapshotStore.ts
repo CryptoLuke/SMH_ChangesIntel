@@ -13,7 +13,11 @@ import type { ObjectType, Snapshot } from "./types.js";
  * nothing upstream (collectors, diff engine) needs to change.
  */
 
-const STORE_ROOT = path.resolve(process.cwd(), "snapshots");
+const STORE_ROOT = path.resolve(process.env.DATA_DIR ?? process.cwd(), "snapshots");
+// DATA_DIR lets a persistent volume (e.g. on Railway) live in a directory
+// separate from the app's own code — mounting a volume directly over the
+// code directory would hide the built files underneath it. Unset locally,
+// this falls back to the previous cwd-relative behavior unchanged.
 
 function dirFor(tenant: string, objectType: ObjectType): string {
   // Tenant name only — never any credential material — touches disk here.

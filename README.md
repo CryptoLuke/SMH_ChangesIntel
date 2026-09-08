@@ -158,12 +158,16 @@ scripts — already set up at the repo root, so in most cases you just:
    both already defined at the repo root.
 
 One thing to know: snapshot/run storage is still plain JSON files on
-local disk (`server/snapshots/`, `server/runs/`). Most of these platforms
-give you a persistent volume/disk you can mount at that path — check
-your platform's docs for how to attach one, since without it your history
-won't survive a redeploy. Migrating to a real database (see "Next steps"
-below) removes this requirement entirely and is worth doing before this
-becomes something you rely on day to day.
+local disk — but the location is configurable via `DATA_DIR` specifically
+so it can live outside the app's own code directory. Set `DATA_DIR` to a
+mounted persistent volume's path (Railway, Render, and Fly.io all offer
+these) and attach a volume there — check your platform's docs for how.
+Without `DATA_DIR` set, storage defaults to `server/snapshots/` and
+`server/runs/` relative to wherever the process starts, which is fine
+locally but won't survive a redeploy on most platforms. Migrating to a
+real database (see "Next steps" below) removes this requirement
+entirely and is worth doing before this becomes something you rely on
+day to day.
 
 ## Next steps
 
