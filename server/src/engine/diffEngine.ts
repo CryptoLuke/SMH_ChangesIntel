@@ -17,6 +17,11 @@ const IGNORED_TOP_LEVEL_FIELDS: Partial<Record<ObjectType, Set<string>>> = {
   // observed directly in a live tenant (a source with zero real config
   // change still showed a changed `modified` timestamp every run).
   sources: new Set(["modified"]),
+  // `synced` is an entitlement-aggregation timestamp that bumps every sync
+  // cycle regardless of whether the entitlement itself changed — observed
+  // directly in a live tenant (thousands of entitlements flagged "modified"
+  // on a run where only `synced` differed, nothing else).
+  entitlements: new Set(["synced"]),
 };
 
 /**

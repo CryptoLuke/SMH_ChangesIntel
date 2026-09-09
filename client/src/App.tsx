@@ -3,7 +3,7 @@ import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { NewRunForm, type RunPrefill } from "./components/NewRunForm";
 import { RunDetail } from "./components/RunDetail";
-import { listRuns, getRun, renameRun } from "./api";
+import { listRuns, getRun, renameRun, getWhoAmI, type WhoAmI } from "./api";
 import type { RunReport, RunSummary } from "./types";
 
 type View = { kind: "new-run" } | { kind: "run"; runId: string };
@@ -13,6 +13,7 @@ export default function App() {
   const [view, setView] = useState<View>({ kind: "new-run" });
   const [selectedRun, setSelectedRun] = useState<RunReport | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [whoAmI, setWhoAmI] = useState<WhoAmI>({});
   // Set only when jumping to "New run" via "Repeat this run" — cleared once
   // consumed so a manual "+ New run" click afterwards starts from a blank form.
   const [prefill, setPrefill] = useState<RunPrefill | undefined>(undefined);
@@ -35,6 +36,12 @@ export default function App() {
         setView({ kind: "run", runId: data[0].id });
       }
     });
+    getWhoAmI()
+      .then(setWhoAmI)
+      .catch(() => {
+        // Non-fatal — the app still works without a displayed username;
+        // this just means the sidebar won't show who's signed in.
+      });
   }, []);
 
   useEffect(() => {
@@ -82,6 +89,7 @@ export default function App() {
         onSelectRun={(id) => setView({ kind: "run", runId: id })}
         onNewRun={handleNewRun}
         onRenameRun={handleRenameRun}
+        whoAmI={whoAmI}
       />
       <main className="main">
         {loadError && <div className="form-error">{loadError}</div>}

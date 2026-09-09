@@ -1,4 +1,5 @@
 import express from "express";
+import type { Request } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -6,6 +7,8 @@ import basicAuth from "express-basic-auth";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runsRouter } from "./routes/runs.js";
+import { loadDashboardUsers, toBasicAuthUsers, toRoleLookup } from "./auth/users.js";
+import "./auth/requireRole.js"; // registers the req.userRole type augmentation
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,31 +25,59 @@ export function createApp() {
   // Everything below this line — dashboard included — requires a login.
   // Without it, anyone who finds the URL could trigger a run using whatever
   // ISC credentials they type into the form themselves.
-  const authUser = process.env.DASHBOARD_USER;
-  const authPassword = process.env.DASHBOARD_PASSWORD;
+  //
+  // Supports multiple named users, each with a role (DASHBOARD_USERS_JSON),
+  // falling back to the legacy single DASHBOARD_USER/DASHBOARD_PASSWORD pair
+  // (treated as one implicit admin) so an existing deployment isn't broken
+  // by this change. See auth/users.ts for the exact format.
+  let dashboardUsers;
+  try {
+    dashboardUsers = loadDashboardUsers();
+  } catch (err) {
+    throw new Error(`Invalid dashboard user configuration: ${err instanceof Error ? err.message : err}`);
+  }
 
-  if (isProduction && (!authUser || !authPassword)) {
+  if (isProduction && dashboardUsers.length === 0) {
     // Fail fast rather than silently boot an unprotected app on a public host.
     throw new Error(
-      "DASHBOARD_USER and DASHBOARD_PASSWORD must both be set in production. " +
-        "Set them as environment variables in your hosting platform before deploying."
+      "No dashboard users configured. Set DASHBOARD_USERS_JSON (or the legacy " +
+        "DASHBOARD_USER/DASHBOARD_PASSWORD pair) as environment variables before deploying."
     );
   }
 
-  if (authUser && authPassword) {
+  if (dashboardUsers.length > 0) {
+    const roleByUsername = toRoleLookup(dashboardUsers);
+
     app.use(
       basicAuth({
-        users: { [authUser]: authPassword },
+        users: toBasicAuthUsers(dashboardUsers),
         challenge: true, // triggers the browser's native login prompt
         unauthorizedResponse: () =>
-          "Authentication required. Enter the DASHBOARD_USER / DASHBOARD_PASSWORD credentials when prompted.",
+          "Authentication required. Enter your dashboard username/password when prompted.",
       })
     );
+
+    // Attaches the authenticated user's role for requireRole() to check
+    // downstream. Runs after basicAuth, so req.auth.user is already set.
+    app.use((req, _res, next) => {
+      const username = (req as Request & { auth?: { user: string } }).auth?.user;
+      req.userRole = username ? roleByUsername[username] : undefined;
+      next();
+    });
+
+    app.get("/api/whoami", (req, res) => {
+      const username = (req as Request & { auth?: { user: string } }).auth?.user;
+      res.json({ username, role: req.userRole });
+    });
   } else {
     console.warn(
-      "WARNING: DASHBOARD_USER/DASHBOARD_PASSWORD not set — running without authentication. " +
+      "WARNING: no dashboard users configured — running without authentication. " +
         "This is only acceptable for local development."
     );
+    // No auth configured locally — /api/whoami still needs to exist so the
+    // client doesn't break; report an implicit admin so local dev isn't
+    // artificially restricted.
+    app.get("/api/whoami", (_req, res) => res.json({ username: "dev", role: "admin" }));
   }
 
   // In production the client is served from the same origin (see below),

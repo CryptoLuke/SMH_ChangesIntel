@@ -128,11 +128,24 @@ platform property.
 
 **At the app/hosting boundary** — this is what actually needed building:
 
-- **Login required.** Every route, including the dashboard itself, sits
-  behind HTTP Basic Auth. Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` as
-  environment variables on your hosting platform (never commit them). In
-  production the app refuses to start at all if either is unset — it
-  fails loudly rather than silently booting unprotected.
+- **Login required, with roles.** Every route, including the dashboard
+  itself, sits behind HTTP Basic Auth. Set `DASHBOARD_USERS_JSON` — a JSON
+  array of named users, each with a role:
+  ```
+  DASHBOARD_USERS_JSON=[{"username":"admin","password":"...","role":"admin"},{"username":"viewer","password":"...","role":"read-only"}]
+  ```
+  `read-only` users can view the dashboard, browse run history, and
+  trigger new collection runs (those only read from ISC). `admin` is
+  required for anything that would write back to your tenant (rollback,
+  once built) — enforced server-side via a `requireRole()` guard on those
+  routes specifically, not just hidden in the UI. Add as many users of
+  either role as you need; nothing else changes.
+
+  Backward compatible: if `DASHBOARD_USERS_JSON` isn't set, the older
+  `DASHBOARD_USER`/`DASHBOARD_PASSWORD` pair still works, treated as a
+  single implicit admin — so an existing deployment isn't broken by this.
+  In production the app refuses to start if neither is set — it fails
+  loudly rather than silently booting unprotected.
 - **Standard security headers** via Helmet (CSP, X-Frame-Options,
   X-Content-Type-Options, etc.) — sane defaults, no custom config needed.
 - **Rate limiting** on `/api/runs` — 20 requests per 15 minutes per IP,
@@ -151,9 +164,10 @@ These platforms auto-detect a root `package.json` with `build`/`start`
 scripts — already set up at the repo root, so in most cases you just:
 
 1. Connect the repo.
-2. Set environment variables: `DASHBOARD_USER`, `DASHBOARD_PASSWORD`,
-   `NODE_ENV=production`. (`PORT` is usually supplied automatically by
-   the platform — the app already reads `process.env.PORT`.)
+2. Set environment variables: `DASHBOARD_USERS_JSON` (or the legacy
+   `DASHBOARD_USER`/`DASHBOARD_PASSWORD` pair), `NODE_ENV=production`.
+   (`PORT` is usually supplied automatically by the platform — the app
+   already reads `process.env.PORT`.)
 3. Deploy. Build command `npm run build`, start command `npm start` —
    both already defined at the repo root.
 

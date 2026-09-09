@@ -31,6 +31,7 @@ export interface RunSummary {
   scope: RunReport["scope"];
   totalChanges: number;
   name?: string;
+  triggeredBy?: string;
 }
 
 export async function listRuns(tenant?: string): Promise<RunSummary[]> {
@@ -57,6 +58,7 @@ export async function listRuns(tenant?: string): Promise<RunSummary[]> {
       scope: r.scope,
       totalChanges: r.reports.reduce((sum, rep) => sum + rep.changes.length, 0),
       name: r.name,
+      triggeredBy: r.triggeredBy,
     }));
 }
 

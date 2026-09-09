@@ -82,6 +82,7 @@ runsRouter.post("/", async (req, res) => {
       scope: body.scope,
       reports,
       name: body.name?.trim() || undefined,
+      triggeredBy: (req as typeof req & { auth?: { user: string } }).auth?.user,
     });
     res.status(201).json(run);
   } catch (err) {

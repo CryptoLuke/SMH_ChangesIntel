@@ -79,4 +79,8 @@ export interface RunReport {
   /** Optional user-given label (e.g. "Baseline", "Investigate") — defaults
    *  to the tenant name in the UI when unset. */
   name?: string;
+  /** Dashboard username that triggered this run (from Basic Auth), or a
+   *  value from ISC_TRIGGERED_BY for CLI runs. Undefined when auth is
+   *  disabled (local dev) or the CLI env var isn't set. */
+  triggeredBy?: string;
 }

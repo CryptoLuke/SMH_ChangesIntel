@@ -98,6 +98,7 @@ async function run() {
     scope,
     reports,
     name: process.env.ISC_RUN_NAME?.trim() || undefined,
+    triggeredBy: process.env.ISC_TRIGGERED_BY?.trim() || undefined,
   });
   console.log(`\nRun saved (id: ${savedRun.id}) — also visible in the dashboard if the API server is running.\n`);
   console.log(JSON.stringify(savedRun, null, 2));

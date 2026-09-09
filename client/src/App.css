@@ -73,6 +73,28 @@ button {
   margin-top: 2px;
 }
 
+.signed-in-as {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: -12px;
+}
+
+.signed-in-as strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.role-badge {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--modify-soft);
+  color: var(--modify);
+  padding: 1px 6px;
+}
+
 .new-run-button {
   background: var(--ink);
   color: var(--paper);

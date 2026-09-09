@@ -56,3 +56,13 @@ export async function renameRun(id: string, name: string): Promise<RunReport> {
   });
   return handle<RunReport>(res);
 }
+
+export interface WhoAmI {
+  username?: string;
+  role?: "admin" | "read-only";
+}
+
+export async function getWhoAmI(): Promise<WhoAmI> {
+  const res = await fetch("/api/whoami");
+  return handle<WhoAmI>(res);
+}

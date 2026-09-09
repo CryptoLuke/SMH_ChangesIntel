@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RunSummary } from "../types";
+import type { WhoAmI } from "../api";
 
 interface Props {
   runs: RunSummary[];
@@ -7,6 +8,7 @@ interface Props {
   onSelectRun: (id: string) => void;
   onNewRun: () => void;
   onRenameRun: (id: string, name: string) => void;
+  whoAmI: WhoAmI;
 }
 
 function formatTimestamp(iso: string): string {
@@ -19,7 +21,7 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRun }: Props) {
+export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRun, whoAmI }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -40,6 +42,13 @@ export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRu
         ISC change intel
         <span>Identity Security Cloud</span>
       </div>
+
+      {whoAmI.username && (
+        <div className="signed-in-as">
+          Signed in as <strong>{whoAmI.username}</strong>
+          {whoAmI.role === "read-only" && <span className="role-badge">read-only</span>}
+        </div>
+      )}
 
       <button className="new-run-button" onClick={onNewRun}>
         + New run
@@ -94,6 +103,7 @@ export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRu
                     {run.name ? `${run.tenant} · ` : ""}
                     {formatTimestamp(run.startedAt)} · {run.totalChanges} change
                     {run.totalChanges === 1 ? "" : "s"}
+                    {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
                   </span>
                 </div>
               );

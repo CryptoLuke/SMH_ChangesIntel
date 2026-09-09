@@ -40,6 +40,7 @@ export interface RunReport {
   scope: ObjectType[];
   reports: DiffReport[];
   name?: string;
+  triggeredBy?: string;
 }
 
 export interface RunSummary {
@@ -49,6 +50,7 @@ export interface RunSummary {
   scope: ObjectType[];
   totalChanges: number;
   name?: string;
+  triggeredBy?: string;
 }
 
 export const ALL_OBJECT_TYPES: ObjectType[] = [
