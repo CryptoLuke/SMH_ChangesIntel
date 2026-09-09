@@ -66,3 +66,60 @@ export async function getWhoAmI(): Promise<WhoAmI> {
   const res = await fetch("/api/whoami");
   return handle<WhoAmI>(res);
 }
+
+export interface RevertRequestPreview {
+  method: "PATCH";
+  path: string;
+  body: { op: string; path: string; value: unknown }[];
+}
+
+export interface RevertExcluded {
+  field: string;
+  reason: string;
+}
+
+export type RevertResult =
+  | { kind: "blocked"; blockedReason: string; excluded: RevertExcluded[] }
+  | { kind: "conflict"; message: string; driftedFields: string[] }
+  | { kind: "preview"; request: RevertRequestPreview; excluded: RevertExcluded[] }
+  | { kind: "applied"; request: RevertRequestPreview; excluded: RevertExcluded[]; result: unknown }
+  | { kind: "error"; message: string };
+
+export interface RevertInput {
+  runId: string;
+  objectType: ObjectType;
+  objectId: string;
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  dryRun: boolean;
+}
+
+/**
+ * Deliberately doesn't go through handle() — a 409 conflict and a 200
+ * "blocked" response both carry structured detail (drifted fields,
+ * exclusion reasons) the UI needs to show, not just a flat error string.
+ * Credentials here are used only for this one request, same as triggerRun.
+ */
+export async function revertChange(input: RevertInput): Promise<RevertResult> {
+  const res = await fetch("/api/revert", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+
+  if (res.status === 409) {
+    return { kind: "conflict", message: body.message ?? "Conflict detected", driftedFields: body.driftedFields ?? [] };
+  }
+  if (!res.ok) {
+    return { kind: "error", message: body.error ?? `Request failed (${res.status})` };
+  }
+  if (body.revertible === false) {
+    return { kind: "blocked", blockedReason: body.blockedReason ?? "Not revertible", excluded: body.excluded ?? [] };
+  }
+  if (body.applied) {
+    return { kind: "applied", request: body.request, excluded: body.excluded ?? [], result: body.result };
+  }
+  return { kind: "preview", request: body.request, excluded: body.excluded ?? [] };
+}

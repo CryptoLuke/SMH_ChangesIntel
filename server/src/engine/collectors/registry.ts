@@ -36,6 +36,21 @@ const COLLECTORS: Record<ObjectType, CollectorDescriptor> = {
 
 export const DEFAULT_SCOPE: ObjectType[] = ["sources", "access-profiles", "workflows"];
 
+/**
+ * Base REST path for get-by-id / patch-by-id operations, independent of how
+ * the object type is *listed* (entitlements are listed via Search due to
+ * the 10k offset ceiling above, but still have a normal /entitlements/v1/{id}
+ * for get/patch — confirmed via developer.sailpoint.com/docs/api/patch-entitlement-v-1).
+ */
+export const RESOURCE_BASE_PATH: Record<ObjectType, string> = {
+  sources: "/sources/v1",
+  "access-profiles": "/access-profiles/v1",
+  roles: "/roles/v1",
+  entitlements: "/entitlements/v1",
+  workflows: "/workflows/v1",
+  identities: "/identities/v1",
+};
+
 export async function collectObjectType(
   conn: TenantConnection,
   token: SessionToken,

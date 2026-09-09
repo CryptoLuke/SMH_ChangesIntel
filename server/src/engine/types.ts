@@ -83,4 +83,15 @@ export interface RunReport {
    *  value from ISC_TRIGGERED_BY for CLI runs. Undefined when auth is
    *  disabled (local dev) or the CLI env var isn't set. */
   triggeredBy?: string;
+  /** Audit trail of reverts applied against changes detected in this run. */
+  reverts?: RevertRecord[];
+}
+
+export interface RevertRecord {
+  objectType: ObjectType;
+  objectId: string;
+  appliedAt: string;
+  appliedBy?: string;
+  fieldsReverted: string[];
+  excludedFields: string[];
 }

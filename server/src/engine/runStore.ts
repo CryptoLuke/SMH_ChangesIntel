@@ -114,3 +114,26 @@ export async function listTenants(): Promise<string[]> {
   );
   return [...tenants].sort();
 }
+
+/** Appends one audit entry to a run's revert history. Read-modify-write
+ *  against the same file, same pattern as renameRun. */
+export async function recordRevert(
+  runId: string,
+  record: Omit<import("./types.js").RevertRecord, "appliedAt">
+): Promise<RunReport | null> {
+  let files: string[];
+  try {
+    files = await readdir(RUNS_ROOT);
+  } catch {
+    return null;
+  }
+  const match = files.find((f) => f.includes(runId));
+  if (!match) return null;
+
+  const filePath = path.join(RUNS_ROOT, match);
+  const run = JSON.parse(await readFile(filePath, "utf-8")) as RunReport;
+  const entry = { ...record, appliedAt: new Date().toISOString() };
+  const updated: RunReport = { ...run, reverts: [...(run.reverts ?? []), entry] };
+  await writeFile(filePath, JSON.stringify(updated, null, 2), "utf-8");
+  return updated;
+}

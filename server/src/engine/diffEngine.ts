@@ -7,7 +7,7 @@ import type { ChangeRecord, FieldDiff, ObjectType, RawObject, Snapshot } from ".
  * field-diff list. Scoped narrowly and documented per entry; this is not a
  * general noise filter.
  */
-const IGNORED_TOP_LEVEL_FIELDS: Partial<Record<ObjectType, Set<string>>> = {
+export const IGNORED_TOP_LEVEL_FIELDS: Partial<Record<ObjectType, Set<string>>> = {
   // lastRefresh and modified are sync/audit timestamps that update on every
   // identity refresh cycle by definition (they record *when* the refresh
   // happened), independent of whether any real attribute changed. Comparing

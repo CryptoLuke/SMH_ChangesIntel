@@ -7,8 +7,9 @@ import basicAuth from "express-basic-auth";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runsRouter } from "./routes/runs.js";
+import { revertRouter } from "./routes/revert.js";
 import { loadDashboardUsers, toBasicAuthUsers, toRoleLookup } from "./auth/users.js";
-import "./auth/requireRole.js"; // registers the req.userRole type augmentation
+import { requireRole } from "./auth/requireRole.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -98,6 +99,12 @@ export function createApp() {
     legacyHeaders: false,
   });
   app.use("/api/runs", runsLimiter, runsRouter);
+
+  // Revert is the one endpoint that writes to a live tenant — admin only,
+  // enforced server-side (see requireRole's own note on why the frontend
+  // hiding this for read-only users is a UX nicety, not the real boundary).
+  // Same rate limit rationale as /api/runs — it calls out to ISC too.
+  app.use("/api/revert", runsLimiter, requireRole("admin"), revertRouter);
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

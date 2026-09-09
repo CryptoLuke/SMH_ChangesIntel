@@ -1,11 +1,15 @@
 import { useState } from "react";
 import type { ChangeRecord, RunReport } from "../types";
 import { OBJECT_TYPE_LABELS } from "../types";
+import { RevertPanel } from "./RevertPanel";
+import type { WhoAmI } from "../api";
 
 interface Props {
   run: RunReport;
   onRepeat: (run: RunReport) => void;
   onRename: (id: string, name: string) => void;
+  onReverted: () => void;
+  whoAmI: WhoAmI;
 }
 
 function formatTimestamp(iso: string): string {
@@ -21,9 +25,20 @@ function formatValue(v: unknown): string {
   return String(v);
 }
 
-function ChangeRow({ change }: { change: ChangeRecord }) {
+function ChangeRow({
+  change,
+  runId,
+  canRevert,
+  onReverted,
+}: {
+  change: ChangeRecord;
+  runId: string;
+  canRevert: boolean;
+  onReverted: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const hasFields = change.changedFields && change.changedFields.length > 0;
+  const revertEligible = canRevert && change.changeType === "modified" && change.objectType !== "identities";
 
   return (
     <div className={`change-row ${change.changeType}`} onClick={() => hasFields && setExpanded((e) => !e)}>
@@ -44,11 +59,19 @@ function ChangeRow({ change }: { change: ChangeRecord }) {
           ))}
         </ul>
       )}
+      {revertEligible && (
+        <RevertPanel
+          runId={runId}
+          objectType={change.objectType}
+          objectId={change.id}
+          onReverted={onReverted}
+        />
+      )}
     </div>
   );
 }
 
-export function RunDetail({ run, onRepeat, onRename }: Props) {
+export function RunDetail({ run, onRepeat, onRename, onReverted, whoAmI }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(run.name ?? "");
   const totalChanges = run.reports.reduce((sum, r) => sum + r.changes.length, 0);
@@ -115,7 +138,15 @@ export function RunDetail({ run, onRepeat, onRename }: Props) {
               {report.baselineSnapshotAt ? "No changes since baseline." : "First run — baseline established."}
             </div>
           ) : (
-            report.changes.map((change) => <ChangeRow key={change.id} change={change} />)
+            report.changes.map((change) => (
+              <ChangeRow
+                key={change.id}
+                change={change}
+                runId={run.id}
+                canRevert={whoAmI.role === "admin"}
+                onReverted={onReverted}
+              />
+            ))
           )}
         </div>
       ))}

@@ -91,3 +91,25 @@ export async function getBaselineAndCurrent(
 
   return { current, baseline };
 }
+
+/**
+ * Loads the exact snapshot taken at a specific timestamp — used by revert
+ * to get the precise "before"/"after" full object bodies a given run's
+ * DiffReport was computed from (report.baselineSnapshotAt / .currentSnapshotAt),
+ * as opposed to getBaselineAndCurrent's "whatever's current/prior right now"
+ * semantics. Returns null if no snapshot with that exact timestamp exists
+ * (e.g. very old data pruned, or a mismatched timestamp).
+ */
+export async function getSnapshotAt(
+  tenant: string,
+  objectType: ObjectType,
+  takenAt: string
+): Promise<Snapshot | null> {
+  const dir = dirFor(tenant, objectType);
+  const filename = `${takenAt.replace(/[:.]/g, "-")}.json`;
+  try {
+    return await loadSnapshot(dir, filename);
+  } catch {
+    return null;
+  }
+}

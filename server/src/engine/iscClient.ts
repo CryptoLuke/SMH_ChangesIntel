@@ -90,3 +90,57 @@ export async function fetchAllViaSearch(
 
   return results;
 }
+
+export interface JsonPatchOp {
+  op: "replace";
+  path: string; // RFC6902 JSON Pointer, e.g. "/owner"
+  value: unknown;
+}
+
+/** Fetches a single object by id. Used for the live conflict check before a
+ *  revert is applied — comparing this against what our snapshot captured. */
+export async function fetchOne(
+  conn: TenantConnection,
+  token: SessionToken,
+  basePath: string,
+  id: string
+): Promise<RawObject> {
+  const res = await fetch(`${conn.baseUrl}${basePath}/${id}`, {
+    headers: { Authorization: `Bearer ${token.accessToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`ISC API request failed: ${res.status} ${res.statusText} (${basePath}/${id})`);
+  }
+  return (await res.json()) as RawObject;
+}
+
+/**
+ * Applies a JSON Patch (RFC6902) to a single object. This is the one place
+ * in the whole app that writes to a live tenant — everything else only
+ * reads. Requires Content-Type: application/json-patch+json per SailPoint's
+ * docs (confirmed on patch-role-v-1, update-source-v-1, patch-access-profile-v-1,
+ * patch-entitlement-v-1). On failure, the API's own error body is surfaced
+ * as-is rather than swallowed, since a rejected field is useful information,
+ * not just a generic failure.
+ */
+export async function patchOne(
+  conn: TenantConnection,
+  token: SessionToken,
+  basePath: string,
+  id: string,
+  patch: JsonPatchOp[]
+): Promise<RawObject> {
+  const res = await fetch(`${conn.baseUrl}${basePath}/${id}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token.accessToken}`,
+      "Content-Type": "application/json-patch+json",
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`ISC PATCH failed: ${res.status} ${res.statusText} (${basePath}/${id}) — ${body}`);
+  }
+  return (await res.json()) as RawObject;
+}

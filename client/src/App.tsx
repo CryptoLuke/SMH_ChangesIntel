@@ -81,6 +81,18 @@ export default function App() {
     }
   }
 
+  async function handleReverted() {
+    // Re-fetch the current run so the audit trail (run.reverts) and any
+    // dependent state reflect the just-applied revert.
+    if (view.kind === "run") {
+      try {
+        setSelectedRun(await getRun(view.runId));
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : "Failed to refresh run after revert");
+      }
+    }
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -98,7 +110,14 @@ export default function App() {
         )}
         {view.kind === "run" &&
           (selectedRun ? (
-            <RunDetail key={selectedRun.id} run={selectedRun} onRepeat={handleRepeatRun} onRename={handleRenameRun} />
+            <RunDetail
+              key={selectedRun.id}
+              run={selectedRun}
+              onRepeat={handleRepeatRun}
+              onRename={handleRenameRun}
+              onReverted={handleReverted}
+              whoAmI={whoAmI}
+            />
           ) : (
             <div className="main-inner empty-state">Loading run...</div>
           ))}
