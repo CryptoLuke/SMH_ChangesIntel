@@ -830,3 +830,37 @@ button {
 .delete-workspace-link {
   color: var(--remove);
 }
+
+/* --- Owner panel table --- */
+
+.owner-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.owner-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line-strong);
+  padding: 8px 12px 8px 0;
+}
+
+.owner-table td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.owner-table-org {
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.owner-table-url {
+  font-family: var(--mono);
+  color: var(--ink-muted);
+  font-size: 12px;
+}

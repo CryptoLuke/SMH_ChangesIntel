@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { NewRunForm, type RunPrefill } from "./components/NewRunForm";
 import { RunDetail } from "./components/RunDetail";
 import { WorkspaceGate } from "./components/WorkspaceGate";
+import { OwnerPanel } from "./components/OwnerPanel";
 import { listRuns, getRun, renameRun, getWhoAmI, deleteRun, deleteWorkspace, logout, type WhoAmI } from "./api";
 import type { RunReport, RunSummary } from "./types";
 
@@ -11,6 +12,17 @@ type View = { kind: "new-run" } | { kind: "run"; runId: string };
 type AuthState = { kind: "loading" } | { kind: "logged-out" } | { kind: "logged-in"; user: WhoAmI };
 
 export default function App() {
+  // A separate, static entry point — /owner is its own identity, entirely
+  // outside the workspace login flow. Checked here, before WorkspaceApp's
+  // hooks exist at all, so this is a plain conditional render, not a
+  // conditional hook call.
+  if (window.location.pathname === "/owner") {
+    return <OwnerPanel />;
+  }
+  return <WorkspaceApp />;
+}
+
+function WorkspaceApp() {
   const [auth, setAuth] = useState<AuthState>({ kind: "loading" });
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "new-run" });

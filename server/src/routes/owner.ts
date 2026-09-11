@@ -26,6 +26,17 @@ ownerRouter.post("/login", (req, res) => {
   res.status(204).end();
 });
 
+ownerRouter.post("/logout", (req, res) => {
+  req.session.isOwner = undefined;
+  res.status(204).end();
+});
+
+/** Lets the frontend check owner-login status without treating "not
+ *  logged in" as an error — unlike requireOwner, which 403s. */
+ownerRouter.get("/whoami", (req, res) => {
+  res.json({ isOwner: req.session.isOwner === true });
+});
+
 /** Name, base URL, creation date, and user count only — never run data or
  *  actual user credentials. See workspaceStore.listWorkspacesSummary. */
 ownerRouter.get("/workspaces", requireOwner, async (_req, res) => {

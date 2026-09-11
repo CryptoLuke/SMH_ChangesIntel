@@ -65,6 +65,10 @@ view of every workspace that's been created: name, base URL, creation
 date, user count. No drill-down into actual run data — it's oversight, not
 access.
 
+Reached at **`/owner`** — e.g. `https://your-app.up.railway.app/owner` —
+a separate path from the main app, with its own login screen. Not linked
+from anywhere in the regular UI; you just need to know the URL.
+
 ## Running the CLI
 
 ```bash

@@ -56,6 +56,43 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
 
+// --- Owner panel (separate identity from any workspace) ---
+
+export interface WorkspaceSummary {
+  orgName: string;
+  baseUrl: string;
+  createdAt: string;
+  userCount: number;
+}
+
+export async function getOwnerWhoAmI(): Promise<boolean> {
+  const res = await fetch("/api/owner/whoami", { credentials: "same-origin" });
+  const body = await handle<{ isOwner: boolean }>(res);
+  return body.isOwner;
+}
+
+export async function ownerLogin(username: string, password: string): Promise<void> {
+  const res = await fetch("/api/owner/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error ?? `Request failed (${res.status})`);
+  }
+}
+
+export async function ownerLogout(): Promise<void> {
+  await fetch("/api/owner/logout", { method: "POST", credentials: "same-origin" });
+}
+
+export async function listAllWorkspaces(): Promise<WorkspaceSummary[]> {
+  const res = await fetch("/api/owner/workspaces", { credentials: "same-origin" });
+  return handle(res);
+}
+
 export interface WorkspaceUserSummary {
   username: string;
   role: "admin" | "read-only";
