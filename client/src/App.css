@@ -609,3 +609,87 @@ button {
 .revert-success strong {
   color: var(--add);
 }
+
+/* --- Delete confirmations and tenant management --- */
+
+.run-item-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.delete-icon-button {
+  color: var(--remove);
+}
+
+.delete-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.delete-confirm-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.delete-confirm-yes,
+.delete-confirm-no {
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  border: 1px solid var(--line-strong);
+  background: white;
+}
+
+.delete-confirm-yes {
+  color: var(--remove);
+  border-color: var(--remove);
+}
+
+.delete-confirm-yes:disabled {
+  color: var(--ink-muted);
+  border-color: var(--line-strong);
+  cursor: default;
+}
+
+.delete-confirm-no {
+  color: var(--ink-muted);
+}
+
+.tenant-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tenant-manage-item {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tenant-manage-name {
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.tenant-delete-confirm {
+  background: var(--remove-soft);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tenant-delete-warning {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.tenant-delete-actions {
+  display: flex;
+  gap: 8px;
+}

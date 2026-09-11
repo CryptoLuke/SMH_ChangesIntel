@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { ObjectType, Snapshot } from "./types.js";
 
@@ -112,4 +112,13 @@ export async function getSnapshotAt(
   } catch {
     return null;
   }
+}
+
+/** Deletes every snapshot (all object types) for a tenant. Used only by the
+ *  "delete this whole tenant" action — never called for single-run deletion,
+ *  since snapshots are shared across consecutive runs (today's "current"
+ *  becomes tomorrow's "baseline"). */
+export async function deleteAllSnapshotsForTenant(tenant: string): Promise<void> {
+  const dir = path.join(STORE_ROOT, sanitize(tenant));
+  await rm(dir, { recursive: true, force: true });
 }

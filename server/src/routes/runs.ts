@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { getAccessToken } from "../engine/auth.js";
 import { collectObjectType } from "../engine/collectors/registry.js";
-import { saveSnapshot, getBaselineAndCurrent } from "../engine/snapshotStore.js";
+import { saveSnapshot, getBaselineAndCurrent, deleteAllSnapshotsForTenant } from "../engine/snapshotStore.js";
 import { diffObjectType } from "../engine/diffEngine.js";
-import { saveRun, listRuns, getRun, listTenants, renameRun } from "../engine/runStore.js";
+import { saveRun, listRuns, getRun, listTenants, renameRun, deleteRun, deleteRunsForTenant } from "../engine/runStore.js";
+import { requireRole } from "../auth/requireRole.js";
 import type { DiffReport, ObjectType, Snapshot, TenantConnection } from "../engine/types.js";
 
 export const runsRouter = Router();
@@ -115,4 +116,27 @@ runsRouter.patch("/:id", async (req, res) => {
   const updated = await renameRun(req.params.id, name);
   if (!updated) return res.status(404).json({ error: "Run not found" });
   res.json(updated);
+});
+
+/**
+ * Deletes a single run's history entry. Admin-only. Snapshot data is left
+ * untouched — see the comment on runStore.deleteRun for why (snapshots are
+ * shared across consecutive runs, deleting one run's diff-report shouldn't
+ * break diffing/revert for others that reference the same snapshot data).
+ */
+runsRouter.delete("/:id", requireRole("admin"), async (req, res) => {
+  const deleted = await deleteRun(req.params.id);
+  if (!deleted) return res.status(404).json({ error: "Run not found" });
+  res.status(204).end();
+});
+
+/**
+ * Deletes ALL runs and ALL snapshot data for a tenant — a full "forget this
+ * tenant" action, unlike single-run deletion above. Admin-only.
+ */
+runsRouter.delete("/tenants/:tenant", requireRole("admin"), async (req, res) => {
+  const tenant = req.params.tenant;
+  const deletedRunCount = await deleteRunsForTenant(tenant);
+  await deleteAllSnapshotsForTenant(tenant);
+  res.json({ deletedRunCount });
 });

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { RunReport } from "./types.js";
@@ -136,4 +136,43 @@ export async function recordRevert(
   const updated: RunReport = { ...run, reverts: [...(run.reverts ?? []), entry] };
   await writeFile(filePath, JSON.stringify(updated, null, 2), "utf-8");
   return updated;
+}
+
+/** Deletes a single run's history entry. Does NOT touch snapshot data —
+ *  snapshots are shared across consecutive runs (today's "current" becomes
+ *  tomorrow's "baseline"), so removing one run's diff-report shouldn't
+ *  break diffing/revert for other runs that reference the same snapshots. */
+export async function deleteRun(id: string): Promise<boolean> {
+  let files: string[];
+  try {
+    files = await readdir(RUNS_ROOT);
+  } catch {
+    return false;
+  }
+  const match = files.find((f) => f.includes(id));
+  if (!match) return false;
+  await unlink(path.join(RUNS_ROOT, match));
+  return true;
+}
+
+/** Deletes every run entry for a tenant. Pairs with
+ *  snapshotStore.deleteAllSnapshotsForTenant for a full "forget this
+ *  tenant" action — unlike single-run deletion, wiping snapshots here is
+ *  safe because nothing else should still need them once the tenant itself
+ *  is being removed. Returns the number of runs deleted. */
+export async function deleteRunsForTenant(tenant: string): Promise<number> {
+  let files: string[];
+  try {
+    files = await readdir(RUNS_ROOT);
+  } catch {
+    return 0;
+  }
+  const runs = await Promise.all(
+    files
+      .filter((f) => f.endsWith(".json"))
+      .map(async (f) => ({ file: f, run: JSON.parse(await readFile(path.join(RUNS_ROOT, f), "utf-8")) as RunReport }))
+  );
+  const toDelete = runs.filter((r) => r.run.tenant === tenant);
+  await Promise.all(toDelete.map((r) => unlink(path.join(RUNS_ROOT, r.file))));
+  return toDelete.length;
 }

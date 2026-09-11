@@ -57,6 +57,21 @@ export async function renameRun(id: string, name: string): Promise<RunReport> {
   return handle<RunReport>(res);
 }
 
+/** DELETE returns 204 No Content on success — no body to parse, unlike
+ *  every other endpoint here, so this doesn't go through handle(). */
+export async function deleteRun(id: string): Promise<void> {
+  const res = await fetch(`/api/runs/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error ?? `Request failed (${res.status})`);
+  }
+}
+
+export async function deleteTenant(tenant: string): Promise<{ deletedRunCount: number }> {
+  const res = await fetch(`/api/runs/tenants/${encodeURIComponent(tenant)}`, { method: "DELETE" });
+  return handle<{ deletedRunCount: number }>(res);
+}
+
 export interface WhoAmI {
   username?: string;
   role?: "admin" | "read-only";

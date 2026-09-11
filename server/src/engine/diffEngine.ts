@@ -37,10 +37,17 @@ export const IGNORED_TOP_LEVEL_FIELDS: Partial<Record<ObjectType, Set<string>>> 
  * epoch, status — that updates on every health-check cycle regardless of
  * whether the source's actual configuration changed. Also observed
  * directly in a live tenant, not documented.
+ *
+ * "since" and "cloudCacheUpdate" (both under a source's `connectorAttributes`,
+ * and "since" also appears at the source's top level) are cache/sync
+ * bookkeeping timestamps — observed directly in a live tenant changing on
+ * every run with no other real difference. Matching by key name at any
+ * depth catches both the nested and top-level occurrences of "since" with
+ * one entry.
  */
 const IGNORED_NESTED_KEYS: Partial<Record<ObjectType, Set<string>>> = {
   identities: new Set(["triggerSnapshots"]),
-  sources: new Set(["slpt-source-diagnostics"]),
+  sources: new Set(["slpt-source-diagnostics", "since", "cloudCacheUpdate"]),
 };
 
 function stripTopLevel(obj: RawObject, ignore: Set<string>): RawObject {

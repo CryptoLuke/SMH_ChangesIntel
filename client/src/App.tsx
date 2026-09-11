@@ -3,7 +3,7 @@ import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { NewRunForm, type RunPrefill } from "./components/NewRunForm";
 import { RunDetail } from "./components/RunDetail";
-import { listRuns, getRun, renameRun, getWhoAmI, type WhoAmI } from "./api";
+import { listRuns, getRun, renameRun, getWhoAmI, deleteRun, deleteTenant, type WhoAmI } from "./api";
 import type { RunReport, RunSummary } from "./types";
 
 type View = { kind: "new-run" } | { kind: "run"; runId: string };
@@ -93,6 +93,35 @@ export default function App() {
     }
   }
 
+  async function handleDeleteRun(id: string) {
+    try {
+      await deleteRun(id);
+      const data = await refreshRuns();
+      if (view.kind === "run" && view.runId === id) {
+        // Currently viewing the run we just deleted — move to whatever's
+        // next, or the new-run form if nothing's left.
+        if (data.length > 0) setView({ kind: "run", runId: data[0].id });
+        else handleNewRun();
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to delete run");
+    }
+  }
+
+  async function handleDeleteTenant(tenant: string) {
+    try {
+      await deleteTenant(tenant);
+      const data = await refreshRuns();
+      // If the run we were viewing belonged to the now-deleted tenant, move on.
+      if (view.kind === "run" && !data.some((r) => r.id === view.runId)) {
+        if (data.length > 0) setView({ kind: "run", runId: data[0].id });
+        else handleNewRun();
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to delete tenant");
+    }
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -101,6 +130,8 @@ export default function App() {
         onSelectRun={(id) => setView({ kind: "run", runId: id })}
         onNewRun={handleNewRun}
         onRenameRun={handleRenameRun}
+        onDeleteRun={handleDeleteRun}
+        onDeleteTenant={handleDeleteTenant}
         whoAmI={whoAmI}
       />
       <main className="main">

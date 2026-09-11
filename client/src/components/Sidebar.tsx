@@ -8,6 +8,8 @@ interface Props {
   onSelectRun: (id: string) => void;
   onNewRun: () => void;
   onRenameRun: (id: string, name: string) => void;
+  onDeleteRun: (id: string) => void;
+  onDeleteTenant: (tenant: string) => void;
   whoAmI: WhoAmI;
 }
 
@@ -21,9 +23,24 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRun, whoAmI }: Props) {
+export function Sidebar({
+  runs,
+  selectedRunId,
+  onSelectRun,
+  onNewRun,
+  onRenameRun,
+  onDeleteRun,
+  onDeleteTenant,
+  whoAmI,
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deletingTenant, setDeletingTenant] = useState<string | null>(null);
+  const [tenantConfirmText, setTenantConfirmText] = useState("");
+
+  const isAdmin = whoAmI.role === "admin";
+  const tenants = [...new Set(runs.map((r) => r.tenant))].sort();
 
   function startEditing(run: RunSummary, e: React.MouseEvent) {
     e.stopPropagation();
@@ -62,18 +79,35 @@ export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRu
           <div className="run-history-list">
             {runs.map((run) => {
               const isEditing = editingId === run.id;
+              const isConfirmingDelete = confirmingDeleteId === run.id;
               return (
                 <div
                   key={run.id}
                   className={`run-history-item${run.id === selectedRunId ? " active" : ""}`}
-                  onClick={() => !isEditing && onSelectRun(run.id)}
+                  onClick={() => !isEditing && !isConfirmingDelete && onSelectRun(run.id)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (!isEditing && (e.key === "Enter" || e.key === " ")) onSelectRun(run.id);
+                    if (!isEditing && !isConfirmingDelete && (e.key === "Enter" || e.key === " ")) onSelectRun(run.id);
                   }}
                 >
-                  {isEditing ? (
+                  {isConfirmingDelete ? (
+                    <div className="delete-confirm-row" onClick={(e) => e.stopPropagation()}>
+                      <span className="delete-confirm-text">Delete this run?</span>
+                      <button
+                        className="delete-confirm-yes"
+                        onClick={() => {
+                          onDeleteRun(run.id);
+                          setConfirmingDeleteId(null);
+                        }}
+                      >
+                        Yes
+                      </button>
+                      <button className="delete-confirm-no" onClick={() => setConfirmingDeleteId(null)}>
+                        No
+                      </button>
+                    </div>
+                  ) : isEditing ? (
                     <input
                       className="run-rename-input"
                       value={editValue}
@@ -89,28 +123,106 @@ export function Sidebar({ runs, selectedRunId, onSelectRun, onNewRun, onRenameRu
                   ) : (
                     <div className="run-history-item-top">
                       <span className="tenant">{run.name || run.tenant}</span>
-                      <button
-                        className="rename-icon-button"
-                        onClick={(e) => startEditing(run, e)}
-                        title="Rename this run"
-                        aria-label="Rename this run"
-                      >
-                        ✎
-                      </button>
+                      <span className="run-item-icons">
+                        <button
+                          className="rename-icon-button"
+                          onClick={(e) => startEditing(run, e)}
+                          title="Rename this run"
+                          aria-label="Rename this run"
+                        >
+                          ✎
+                        </button>
+                        {isAdmin && (
+                          <button
+                            className="rename-icon-button delete-icon-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingDeleteId(run.id);
+                            }}
+                            title="Delete this run"
+                            aria-label="Delete this run"
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </span>
                     </div>
                   )}
-                  <span className="meta">
-                    {run.name ? `${run.tenant} · ` : ""}
-                    {formatTimestamp(run.startedAt)} · {run.totalChanges} change
-                    {run.totalChanges === 1 ? "" : "s"}
-                    {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
-                  </span>
+                  {!isConfirmingDelete && (
+                    <span className="meta">
+                      {run.name ? `${run.tenant} · ` : ""}
+                      {formatTimestamp(run.startedAt)} · {run.totalChanges} change
+                      {run.totalChanges === 1 ? "" : "s"}
+                      {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
+                    </span>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {isAdmin && tenants.length > 0 && (
+        <div>
+          <div className="run-history-label">Manage tenants</div>
+          <div className="tenant-manage-list">
+            {tenants.map((tenant) => (
+              <div key={tenant} className="tenant-manage-item">
+                {deletingTenant === tenant ? (
+                  <div className="tenant-delete-confirm">
+                    <div className="tenant-delete-warning">
+                      This permanently deletes every run and all snapshot history for <strong>{tenant}</strong>. Type the
+                      tenant name to confirm:
+                    </div>
+                    <input
+                      className="run-rename-input"
+                      value={tenantConfirmText}
+                      autoFocus
+                      onChange={(e) => setTenantConfirmText(e.target.value)}
+                      placeholder={tenant}
+                    />
+                    <div className="tenant-delete-actions">
+                      <button
+                        className="delete-confirm-yes"
+                        disabled={tenantConfirmText !== tenant}
+                        onClick={() => {
+                          onDeleteTenant(tenant);
+                          setDeletingTenant(null);
+                          setTenantConfirmText("");
+                        }}
+                      >
+                        Delete permanently
+                      </button>
+                      <button
+                        className="delete-confirm-no"
+                        onClick={() => {
+                          setDeletingTenant(null);
+                          setTenantConfirmText("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="tenant-manage-name">{tenant}</span>
+                    <button
+                      className="rename-icon-button delete-icon-button"
+                      onClick={() => setDeletingTenant(tenant)}
+                      title={`Delete all data for ${tenant}`}
+                      aria-label={`Delete all data for ${tenant}`}
+                    >
+                      🗑
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
