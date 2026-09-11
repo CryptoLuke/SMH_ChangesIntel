@@ -3,10 +3,11 @@ import type { ObjectType, SessionToken, TenantConnection } from "./types.js";
 /**
  * Maps our object types to the human-readable label ISC uses in its audit
  * event names — confirmed directly from a live tenant's Search UI: a
- * source update event is named exactly "Update Source Passed". Identities
- * are deliberately absent — their changes come from aggregation/HR data,
- * not a specific ISC user action, so "who did this" doesn't apply the
- * same way.
+ * source update event is named exactly "Update Source Passed", and an
+ * identity profile update is named "Update Identity Profile Passed".
+ * Identities are deliberately absent — their changes come from
+ * aggregation/HR data, not a specific ISC user action, so "who did this"
+ * doesn't apply the same way.
  */
 const OBJECT_EVENT_LABEL: Partial<Record<ObjectType, string>> = {
   sources: "Source",
@@ -14,12 +15,29 @@ const OBJECT_EVENT_LABEL: Partial<Record<ObjectType, string>> = {
   roles: "Role",
   entitlements: "Entitlement",
   workflows: "Workflow",
+  "identity-profiles": "Identity Profile",
 };
 
 const OPERATION_VERB: Record<"added" | "modified" | "removed", string> = {
   added: "Create",
   modified: "Update",
   removed: "Delete",
+};
+
+/**
+ * Additional confirmed event-name variants beyond the standard
+ * "<Operation> <Object> Passed" pattern. Identity profile updates were
+ * observed logging under either "Update Identity Profile Passed" or
+ * "Update Identity Profile Attributes Passed" depending on what changed —
+ * matching only the primary pattern would silently miss real
+ * modifications logged under the second name.
+ */
+const EXTRA_EVENT_NAMES: Partial<
+  Record<ObjectType, Partial<Record<"added" | "modified" | "removed", string[]>>>
+> = {
+  "identity-profiles": {
+    modified: ["Update Identity Profile Attributes Passed"],
+  },
 };
 
 function escapeQueryPhrase(value: string): string {
@@ -36,15 +54,16 @@ export interface AuditActorResult {
  * Looks up who made a specific detected change, via the ISC Search API's
  * "events" index. Matches on the event's name — a predictable
  * "<Operation> <Object> Passed" pattern (confirmed: "Update Source
- * Passed") — plus the object's own name, within the exact window the
- * change was detected in (the baseline-to-current snapshot timestamps).
+ * Passed"), plus any confirmed extra variants for that object type/change
+ * — plus the object's own name, within the exact window the change was
+ * detected in (the baseline-to-current snapshot timestamps).
  *
  * Deliberately conservative: only the simple query-string syntax already
  * confirmed working elsewhere in this app is used here (quoted-phrase
- * AND, plus the RANGE filter pattern) — not the DSL clause types (match,
- * match_phrase) that weren't directly verified. Returns null on no match
- * or any error, rather than guessing — a missing actor is safer than a
- * wrong one shown confidently.
+ * AND/OR, plus the RANGE filter pattern) — not the DSL clause types
+ * (match, match_phrase) that weren't directly verified. Returns null on
+ * no match or any error, rather than guessing — a missing actor is safer
+ * than a wrong one shown confidently.
  */
 export async function findActorForChange(
   conn: TenantConnection,
@@ -58,8 +77,10 @@ export async function findActorForChange(
   const objectLabel = OBJECT_EVENT_LABEL[objectType];
   if (!objectLabel) return null;
 
-  const eventName = `${OPERATION_VERB[changeType]} ${objectLabel} Passed`;
-  const query = `name:"${escapeQueryPhrase(eventName)}" AND target.name:"${escapeQueryPhrase(objectName)}"`;
+  const primaryEventName = `${OPERATION_VERB[changeType]} ${objectLabel} Passed`;
+  const eventNames = [primaryEventName, ...(EXTRA_EVENT_NAMES[objectType]?.[changeType] ?? [])];
+  const namePart = eventNames.map((n) => `name:"${escapeQueryPhrase(n)}"`).join(" OR ");
+  const query = `(${namePart}) AND target.name:"${escapeQueryPhrase(objectName)}"`;
 
   const body = {
     indices: ["events"],
@@ -102,7 +123,7 @@ export async function findActorForChange(
   if (!mostRecent?.actor?.name) return null;
   return {
     actorName: mostRecent.actor.name,
-    eventName: mostRecent.name ?? eventName,
+    eventName: mostRecent.name ?? primaryEventName,
     createdAt: mostRecent.created ?? "",
   };
 }

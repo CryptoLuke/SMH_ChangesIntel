@@ -11,6 +11,7 @@ import { fetchAll, fetchAllViaSearch } from "../iscClient.js";
  *   - List roles:           GET /roles/v1             (developer.sailpoint.com/docs/api/list-roles-v-1)
  *   - List workflows:       GET /workflows/v1         (developer.sailpoint.com/docs/api/list-workflows-v-1)
  *   - List identities:      GET /identities/v1        (developer.sailpoint.com/docs/api/list-identities-v-1)
+ *   - List identity profiles: GET /identity-profiles/v1 (developer.sailpoint.com/docs/api/identity-profiles — TypeScript SDK doc confirms list-identity-profiles-v1)
  *
  * Entitlements are the exception: /entitlements/v1's offset pagination hits
  * a hard ceiling around 10,000 (confirmed directly — a live tenant with
@@ -32,6 +33,7 @@ const COLLECTORS: Record<ObjectType, CollectorDescriptor> = {
   entitlements: { kind: "search", index: "entitlements" },
   workflows: { kind: "list", path: "/workflows/v1" },
   identities: { kind: "list", path: "/identities/v1" },
+  "identity-profiles": { kind: "list", path: "/identity-profiles/v1" },
 };
 
 export const DEFAULT_SCOPE: ObjectType[] = ["sources", "access-profiles", "workflows"];
@@ -49,6 +51,7 @@ export const RESOURCE_BASE_PATH: Record<ObjectType, string> = {
   entitlements: "/entitlements/v1",
   workflows: "/workflows/v1",
   identities: "/identities/v1",
+  "identity-profiles": "/identity-profiles/v1",
 };
 
 export async function collectObjectType(

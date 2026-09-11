@@ -18,7 +18,8 @@ export type ObjectType =
   | "roles"
   | "entitlements"
   | "workflows"
-  | "identities";
+  | "identities"
+  | "identity-profiles";
 
 /** A single ISC object as returned by the API, kept generic since shapes vary by type. */
 export interface RawObject {

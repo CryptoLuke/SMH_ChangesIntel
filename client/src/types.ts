@@ -4,7 +4,8 @@ export type ObjectType =
   | "roles"
   | "entitlements"
   | "workflows"
-  | "identities";
+  | "identities"
+  | "identity-profiles";
 
 export interface FieldDiff {
   field: string;
@@ -60,6 +61,7 @@ export const ALL_OBJECT_TYPES: ObjectType[] = [
   "entitlements",
   "workflows",
   "identities",
+  "identity-profiles",
 ];
 
 export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
@@ -69,4 +71,5 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   entitlements: "Entitlements",
   workflows: "Workflows",
   identities: "Identities",
+  "identity-profiles": "Identity profiles",
 };
