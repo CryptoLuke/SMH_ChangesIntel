@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RunSummary } from "../types";
 import type { WhoAmI } from "../api";
+import { PencilIcon, TrashIcon } from "./icons";
 
 interface Props {
   runs: RunSummary[];
@@ -130,7 +131,7 @@ export function Sidebar({
                           title="Rename this run"
                           aria-label="Rename this run"
                         >
-                          ✎
+                          <PencilIcon />
                         </button>
                         {isAdmin && (
                           <button
@@ -142,7 +143,7 @@ export function Sidebar({
                             title="Delete this run"
                             aria-label="Delete this run"
                           >
-                            🗑
+                            <TrashIcon />
                           </button>
                         )}
                       </span>
@@ -214,7 +215,7 @@ export function Sidebar({
                       title={`Delete all data for ${tenant}`}
                       aria-label={`Delete all data for ${tenant}`}
                     >
-                      🗑
+                      <TrashIcon />
                     </button>
                   </>
                 )}

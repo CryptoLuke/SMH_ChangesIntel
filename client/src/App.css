@@ -164,9 +164,16 @@ button {
   font-size: 12px;
   opacity: 0;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .run-history-item:hover .rename-icon-button {
+  opacity: 1;
+}
+
+.tenant-manage-item:hover .rename-icon-button {
   opacity: 1;
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ChangeRecord, RunReport } from "../types";
 import { OBJECT_TYPE_LABELS } from "../types";
 import { RevertPanel } from "./RevertPanel";
+import { PencilIcon } from "./icons";
 import type { WhoAmI } from "../api";
 
 interface Props {
@@ -109,7 +110,7 @@ export function RunDetail({ run, onRepeat, onRename, onReverted, whoAmI }: Props
               title="Rename this run"
               aria-label="Rename this run"
             >
-              ✎
+              <PencilIcon />
             </button>
           </h1>
         )}
