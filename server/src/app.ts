@@ -1,114 +1,96 @@
 import express from "express";
-import type { Request } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import basicAuth from "express-basic-auth";
+import session from "express-session";
+import FileStoreFactory from "session-file-store";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runsRouter } from "./routes/runs.js";
 import { revertRouter } from "./routes/revert.js";
-import { loadDashboardUsers, toBasicAuthUsers, toRoleLookup } from "./auth/users.js";
-import { requireRole } from "./auth/requireRole.js";
+import { authRouter } from "./routes/auth.js";
+import { ownerRouter } from "./routes/owner.js";
+import { requireLogin, requireRole } from "./auth/requireRole.js";
+import "./auth/session.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FileStore = FileStoreFactory(session);
 
 export function createApp() {
   const app = express();
-
-  // Standard security headers (CSP, X-Frame-Options, etc.) — sane defaults
-  // out of the box, no custom config needed for this app's shape.
-  app.use(helmet());
-
   const isProduction = process.env.NODE_ENV === "production";
 
-  // --- Auth gate ---
-  // Everything below this line — dashboard included — requires a login.
-  // Without it, anyone who finds the URL could trigger a run using whatever
-  // ISC credentials they type into the form themselves.
-  //
-  // Supports multiple named users, each with a role (DASHBOARD_USERS_JSON),
-  // falling back to the legacy single DASHBOARD_USER/DASHBOARD_PASSWORD pair
-  // (treated as one implicit admin) so an existing deployment isn't broken
-  // by this change. See auth/users.ts for the exact format.
-  let dashboardUsers;
-  try {
-    dashboardUsers = loadDashboardUsers();
-  } catch (err) {
-    throw new Error(`Invalid dashboard user configuration: ${err instanceof Error ? err.message : err}`);
-  }
+  // Trust the platform's reverse proxy (Railway, etc.) so Express correctly
+  // sees requests as HTTPS — required for cookie.secure to work at all.
+  // Without this, secure cookies silently never get set behind a proxy.
+  if (isProduction) app.set("trust proxy", 1);
 
-  if (isProduction && dashboardUsers.length === 0) {
-    // Fail fast rather than silently boot an unprotected app on a public host.
-    throw new Error(
-      "No dashboard users configured. Set DASHBOARD_USERS_JSON (or the legacy " +
-        "DASHBOARD_USER/DASHBOARD_PASSWORD pair) as environment variables before deploying."
-    );
-  }
+  app.use(helmet());
 
-  if (dashboardUsers.length > 0) {
-    const roleByUsername = toRoleLookup(dashboardUsers);
-
-    app.use(
-      basicAuth({
-        users: toBasicAuthUsers(dashboardUsers),
-        challenge: true, // triggers the browser's native login prompt
-        unauthorizedResponse: () =>
-          "Authentication required. Enter your dashboard username/password when prompted.",
-      })
-    );
-
-    // Attaches the authenticated user's role for requireRole() to check
-    // downstream. Runs after basicAuth, so req.auth.user is already set.
-    app.use((req, _res, next) => {
-      const username = (req as Request & { auth?: { user: string } }).auth?.user;
-      req.userRole = username ? roleByUsername[username] : undefined;
-      next();
-    });
-
-    app.get("/api/whoami", (req, res) => {
-      const username = (req as Request & { auth?: { user: string } }).auth?.user;
-      res.json({ username, role: req.userRole });
-    });
-  } else {
-    console.warn(
-      "WARNING: no dashboard users configured — running without authentication. " +
-        "This is only acceptable for local development."
-    );
-    // No auth configured locally — /api/whoami still needs to exist so the
-    // client doesn't break; report an implicit admin so local dev isn't
-    // artificially restricted.
-    app.get("/api/whoami", (_req, res) => res.json({ username: "dev", role: "admin" }));
-  }
-
-  // In production the client is served from the same origin (see below),
-  // so CORS is only needed for local dev where Vite runs on its own port.
   if (!isProduction) {
-    app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? "http://localhost:5173" }));
+    app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? "http://localhost:5173", credentials: true }));
   }
+
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (isProduction && !sessionSecret) {
+    throw new Error(
+      "SESSION_SECRET must be set in production. Set it as an environment variable on your hosting platform " +
+        "before deploying — any long random string works."
+    );
+  }
+
+  app.use(
+    session({
+      store: new FileStore({
+        path: path.resolve(process.env.DATA_DIR ?? process.cwd(), "sessions"),
+        logFn: () => {}, // the default logs every read/write to stdout — too noisy
+      }),
+      secret: sessionSecret ?? "dev-only-secret-not-for-production",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      },
+    })
+  );
 
   app.use(express.json());
 
-  // Rate limit the run-triggering endpoint specifically — it's the
-  // expensive one (proxies to the ISC tenant) and the one worth protecting
-  // from accidental hammering or abuse.
+  // Brute-force protection on the endpoints that check a password.
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use("/api/auth/login", authLimiter);
+  app.use("/api/owner/login", authLimiter);
+  app.use("/api/workspaces", authLimiter); // covers both check and create
+
+  app.use("/api", authRouter);
+  app.use("/api/owner", ownerRouter);
+
+  // Rate limit the run-triggering/revert endpoints specifically — they're
+  // the ones that actually call out to an ISC tenant.
   const runsLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 20,
     standardHeaders: true,
     legacyHeaders: false,
   });
-  app.use("/api/runs", runsLimiter, runsRouter);
-
-  // Revert is the one endpoint that writes to a live tenant — admin only,
-  // enforced server-side (see requireRole's own note on why the frontend
-  // hiding this for read-only users is a UX nicety, not the real boundary).
-  // Same rate limit rationale as /api/runs — it calls out to ISC too.
-  app.use("/api/revert", runsLimiter, requireRole("admin"), revertRouter);
+  app.use("/api/runs", requireLogin, runsLimiter, runsRouter);
+  app.use("/api/revert", requireLogin, runsLimiter, requireRole("admin"), revertRouter);
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-  // Serve the built React app in production (npm run build in client/ first).
+  // Static files are deliberately NOT gated — the SPA itself renders the
+  // unauthenticated "select or create workspace" screen, discovering
+  // session state by calling /api/auth/whoami on load. Everything that
+  // actually matters (runs, revert, workspace user management) is gated
+  // above, per-route.
   const clientDist = path.resolve(__dirname, "../../client/dist");
   app.use(express.static(clientDist));
   app.get("*", (_req, res) => {

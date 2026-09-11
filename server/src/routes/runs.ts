@@ -1,16 +1,17 @@
 import { Router } from "express";
 import { getAccessToken } from "../engine/auth.js";
 import { collectObjectType } from "../engine/collectors/registry.js";
-import { saveSnapshot, getBaselineAndCurrent, deleteAllSnapshotsForTenant } from "../engine/snapshotStore.js";
+import { saveSnapshot, getBaselineAndCurrent } from "../engine/snapshotStore.js";
 import { diffObjectType } from "../engine/diffEngine.js";
-import { saveRun, listRuns, getRun, listTenants, renameRun, deleteRun, deleteRunsForTenant } from "../engine/runStore.js";
+import { saveRun, listRuns, getRun, renameRun, deleteRun } from "../engine/runStore.js";
+import { getWorkspace } from "../auth/workspaceStore.js";
 import { requireRole } from "../auth/requireRole.js";
+import "../auth/session.js";
 import type { DiffReport, ObjectType, Snapshot, TenantConnection } from "../engine/types.js";
 
 export const runsRouter = Router();
 
 interface TriggerRunBody {
-  baseUrl: string;
   clientId: string;
   clientSecret: string;
   scope: ObjectType[];
@@ -19,29 +20,28 @@ interface TriggerRunBody {
 }
 
 /**
- * Triggers a new collection + diff run.
- *
- * baseUrl/clientId/clientSecret arrive in the request body, are used only
- * to obtain a bearer token for this request's lifetime, and are never
- * written to disk, logged, or included in the response or the saved
- * RunReport. Nothing here persists them beyond this handler returning.
+ * Triggers a new collection + diff run against the caller's own workspace.
+ * Unlike before, baseUrl is NOT accepted from the request — it comes from
+ * the registered workspace record for the logged-in session, so there's no
+ * way to point a run at a different tenant than the one you're logged into.
+ * clientId/clientSecret still arrive fresh per request and are never stored.
  */
 runsRouter.post("/", async (req, res) => {
   const body = req.body as Partial<TriggerRunBody>;
+  const { orgName, username } = req.session.user!;
 
-  if (!body.baseUrl || !body.clientId || !body.clientSecret) {
-    return res.status(400).json({ error: "baseUrl, clientId, and clientSecret are required" });
+  if (!body.clientId || !body.clientSecret) {
+    return res.status(400).json({ error: "clientId and clientSecret are required" });
   }
   if (!body.scope || body.scope.length === 0) {
     return res.status(400).json({ error: "scope must include at least one object type" });
   }
 
-  const conn: TenantConnection = {
-    baseUrl: body.baseUrl.replace(/\/$/, ""),
-    clientId: body.clientId,
-    clientSecret: body.clientSecret,
-  };
-  const tenant = new URL(conn.baseUrl).hostname.split(".")[0];
+  const workspace = await getWorkspace(orgName);
+  if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+  const conn: TenantConnection = { baseUrl: workspace.baseUrl, clientId: body.clientId, clientSecret: body.clientSecret };
+  const tenant = orgName;
   const lookbackDays = body.lookbackDays;
 
   try {
@@ -83,7 +83,7 @@ runsRouter.post("/", async (req, res) => {
       scope: body.scope,
       reports,
       name: body.name?.trim() || undefined,
-      triggeredBy: (req as typeof req & { auth?: { user: string } }).auth?.user,
+      triggeredBy: username,
     });
     res.status(201).json(run);
   } catch (err) {
@@ -93,18 +93,19 @@ runsRouter.post("/", async (req, res) => {
   }
 });
 
+/** Always scoped to the caller's own workspace — there's no way to list
+ *  another workspace's runs, by design. */
 runsRouter.get("/", async (req, res) => {
-  const tenant = typeof req.query.tenant === "string" ? req.query.tenant : undefined;
-  res.json(await listRuns(tenant));
+  res.json(await listRuns(req.session.user!.orgName));
 });
 
-runsRouter.get("/tenants", async (_req, res) => {
-  res.json(await listTenants());
-});
-
+/** Ownership check: a run belonging to a different workspace 404s rather
+ *  than 403s, so as not to confirm that a given run id exists elsewhere. */
 runsRouter.get("/:id", async (req, res) => {
   const run = await getRun(req.params.id);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  if (!run || run.tenant !== req.session.user!.orgName) {
+    return res.status(404).json({ error: "Run not found" });
+  }
   res.json(run);
 });
 
@@ -113,8 +114,11 @@ runsRouter.patch("/:id", async (req, res) => {
   if (typeof name !== "string") {
     return res.status(400).json({ error: "name (string) is required" });
   }
+  const run = await getRun(req.params.id);
+  if (!run || run.tenant !== req.session.user!.orgName) {
+    return res.status(404).json({ error: "Run not found" });
+  }
   const updated = await renameRun(req.params.id, name);
-  if (!updated) return res.status(404).json({ error: "Run not found" });
   res.json(updated);
 });
 
@@ -125,18 +129,10 @@ runsRouter.patch("/:id", async (req, res) => {
  * break diffing/revert for others that reference the same snapshot data).
  */
 runsRouter.delete("/:id", requireRole("admin"), async (req, res) => {
-  const deleted = await deleteRun(req.params.id);
-  if (!deleted) return res.status(404).json({ error: "Run not found" });
+  const run = await getRun(req.params.id);
+  if (!run || run.tenant !== req.session.user!.orgName) {
+    return res.status(404).json({ error: "Run not found" });
+  }
+  await deleteRun(req.params.id);
   res.status(204).end();
-});
-
-/**
- * Deletes ALL runs and ALL snapshot data for a tenant — a full "forget this
- * tenant" action, unlike single-run deletion above. Admin-only.
- */
-runsRouter.delete("/tenants/:tenant", requireRole("admin"), async (req, res) => {
-  const tenant = req.params.tenant;
-  const deletedRunCount = await deleteRunsForTenant(tenant);
-  await deleteAllSnapshotsForTenant(tenant);
-  res.json({ deletedRunCount });
 });

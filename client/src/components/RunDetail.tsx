@@ -117,7 +117,6 @@ export function RunDetail({ run, onRepeat, onRename, onReverted, whoAmI }: Props
         <span className="timestamp">{formatTimestamp(run.startedAt)}</span>
       </div>
       <div className="run-baseline">
-        {run.name ? `${run.tenant} · ` : ""}
         {totalChanges} change{totalChanges === 1 ? "" : "s"} across {run.scope.length} object type
         {run.scope.length === 1 ? "" : "s"}
         {run.lookbackDays ? ` · ${run.lookbackDays}d lookback` : ""}

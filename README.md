@@ -19,17 +19,51 @@ client/          React (Vite) dashboard — new-run form + changelog view
 
 ## Credential handling
 
-Client ID/Secret are entered fresh for every run — in the CLI via
-environment variables you set at run time, in the dashboard via the
-"New run" form. Neither path writes them to disk or logs them; they exist
-only for the duration of the request that exchanges them for a bearer
-token. See `server/src/cli.ts` and `server/src/routes/runs.ts` for the
-exact boundary — that's the only place credentials ever touch this codebase.
+Two different things are handled differently:
 
-This app is meant to be deployed later, so if you eventually want scheduled
-/ unattended runs, that's the one seam to change: swap the form/env-var
-credential input for a call to a secrets manager. Nothing else in the
-pipeline needs to change.
+- **ISC Client ID/Secret** (what actually talks to your tenant) are entered
+  fresh for every run and every revert — never stored, never logged. See
+  `server/src/routes/runs.ts` and `routes/revert.ts` for the exact
+  boundary — that's the only place they ever touch this codebase.
+- **Dashboard login** (who can open the app at all) is now a real account
+  system — see "Workspaces" below. This was previously a single shared
+  password; it isn't anymore.
+
+## Workspaces
+
+Each ISC tenant is a **workspace** — a first-class registered thing, not
+just a string inferred from whatever URL someone happened to type. A
+workspace's identity is its base URL, which must match one of:
+
+```
+https://<org>.api.identitynow.com
+https://<org>.api.identitynow-demo.com
+```
+
+The `<org>` part is what everything else in the app calls the tenant name.
+
+**How people get in:**
+1. Open the app → enter the tenant's base URL.
+2. If a workspace already exists for it → log in with a provisioned
+   username/password.
+3. If not → set one up on the spot; whoever creates it becomes its first
+   admin.
+
+Users are scoped to their workspace — logging into one workspace never
+shows you another's runs. Admins can add more users (either role) to their
+own workspace via the "Workspace users" panel in the sidebar; there's no
+cross-workspace user management by design.
+
+**Roles**, same idea as before: `read-only` can view everything and
+trigger new collection runs (those only read from ISC); `admin` is
+additionally required for anything that writes back to your tenant
+(revert) or manages the workspace itself (adding users, deleting it).
+
+**Owner panel** — a single separate login (`OWNER_USERNAME`/
+`OWNER_PASSWORD` env vars, not tied to any workspace) for a monitoring-only
+view of every workspace that's been created: name, base URL, creation
+date, user count. No drill-down into actual run data — it's oversight, not
+access.
 
 ## Running the CLI
 
@@ -75,19 +109,19 @@ npm install
 npm run dev           # http://localhost:5173, proxies /api to :3001
 ```
 
-Open http://localhost:5173. Use "New run" to enter the tenant base URL,
-Client ID/Secret, pick object types and (optionally) a trace-back window,
-then run. Results land in the changelog view — grouped by object type,
+Open http://localhost:5173. Enter a tenant base URL to set up a workspace
+(first time) or log in (if one already exists) — see "Workspaces" above.
+Once in, "New run" only asks for Client ID/Secret, object types, and an
+optional trace-back window — the base URL is fixed by the workspace you're
+logged into. Results land in the changelog view — grouped by object type,
 color-coded by added/removed/modified, click a row to expand field-level
 diffs.
 
-For local dev, `DASHBOARD_USER`/`DASHBOARD_PASSWORD` are optional — if
-unset, the API runs without auth and logs a warning. Set them (in
-terminal 1, alongside the other env vars) to test the login flow locally
-before deploying:
+Set `SESSION_SECRET` (any long random string) in terminal 1 alongside the
+other env vars — required for login sessions to work at all:
 
 ```bash
-DASHBOARD_USER=admin DASHBOARD_PASSWORD=devpassword npm run dev
+SESSION_SECRET=any-random-string npm run dev
 ```
 
 ### Production / deployment
@@ -128,35 +162,32 @@ platform property.
 
 **At the app/hosting boundary** — this is what actually needed building:
 
-- **Login required, with roles.** Every route, including the dashboard
-  itself, sits behind HTTP Basic Auth. Set `DASHBOARD_USERS_JSON` — a JSON
-  array of named users, each with a role:
-  ```
-  DASHBOARD_USERS_JSON=[{"username":"admin","password":"...","role":"admin"},{"username":"viewer","password":"...","role":"read-only"}]
-  ```
-  `read-only` users can view the dashboard, browse run history, and
-  trigger new collection runs (those only read from ISC). `admin` is
-  required for anything that would write back to your tenant (rollback,
-  once built) — enforced server-side via a `requireRole()` guard on those
-  routes specifically, not just hidden in the UI. Add as many users of
-  either role as you need; nothing else changes.
-
-  Backward compatible: if `DASHBOARD_USERS_JSON` isn't set, the older
-  `DASHBOARD_USER`/`DASHBOARD_PASSWORD` pair still works, treated as a
-  single implicit admin — so an existing deployment isn't broken by this.
-  In production the app refuses to start if neither is set — it fails
-  loudly rather than silently booting unprotected.
+- **Login required, session-based.** Every API route except the ones that
+  bootstrap a session (`/api/workspaces/check`, `/api/workspaces` create,
+  `/api/auth/login`, `/api/owner/login`) requires a valid session cookie.
+  Static files (the page shell itself) are deliberately public, since the
+  app needs to render its own login screen before any session exists —
+  the API is where enforcement actually happens.
+- **Passwords are hashed** (bcrypt) in the per-workspace user store —
+  never plaintext, never in an env var, unlike the old shared-password
+  model.
+- **Sessions persist to disk** (`session-file-store`, under `DATA_DIR`),
+  so a redeploy doesn't silently log everyone out.
+- **Role enforcement is server-side**, via a `requireRole()` guard on the
+  actual write-capable routes (revert, delete, add-user) — not just
+  hidden in the UI.
 - **Standard security headers** via Helmet (CSP, X-Frame-Options,
   X-Content-Type-Options, etc.) — sane defaults, no custom config needed.
-- **Rate limiting** on `/api/runs` — 20 requests per 15 minutes per IP,
-  since that's the endpoint that actually calls out to your ISC tenant.
+- **Rate limiting** on `/api/runs`, `/api/revert`, and the login endpoints
+  specifically — the ones worth protecting from brute-forcing or hammering
+  a live ISC tenant.
 - **Managed hosting** (as opposed to a self-run VPS) means the platform
   patches the OS and manages network exposure — less for you to secure
   directly.
 
 Client ID/Secret themselves are still never persisted anywhere (see
 "Credential handling" above) — that hasn't changed, this just adds a lock
-on the door in front of it.
+on the door in front of the app itself.
 
 ## Deploying (Railway, Render, or similar)
 
@@ -164,12 +195,32 @@ These platforms auto-detect a root `package.json` with `build`/`start`
 scripts — already set up at the repo root, so in most cases you just:
 
 1. Connect the repo.
-2. Set environment variables: `DASHBOARD_USERS_JSON` (or the legacy
-   `DASHBOARD_USER`/`DASHBOARD_PASSWORD` pair), `NODE_ENV=production`.
+2. Set environment variables: `SESSION_SECRET` (required — any long random
+   string), `NODE_ENV=production`, and optionally `OWNER_USERNAME`/
+   `OWNER_PASSWORD` if you want the owner monitoring panel.
    (`PORT` is usually supplied automatically by the platform — the app
    already reads `process.env.PORT`.)
 3. Deploy. Build command `npm run build`, start command `npm start` —
    both already defined at the repo root.
+
+### Migrating from the old single-tenant setup
+
+If you were already running this with `DASHBOARD_USER`/
+`DASHBOARD_USERS_JSON`, that model is gone — replaced entirely by
+workspaces. Nothing auto-migrates your login credentials, but your actual
+run/snapshot history isn't lost: it's already stored under your tenant's
+org name, which is exactly what a workspace's identity is too. To pick up
+where you left off:
+
+1. Deploy this version.
+2. Open the app, enter your tenant's base URL — since no workspace is
+   registered yet, you'll land on the "create workspace" step.
+3. Create it with a new username/password of your choosing. As soon as
+   it's created, your existing runs and snapshots for that org name become
+   visible again — they were never touched, just waiting for a workspace
+   record to attach to.
+4. Remove the now-unused `DASHBOARD_USER`/`DASHBOARD_USERS_JSON` variables
+   from your hosting platform.
 
 One thing to know: snapshot/run storage is still plain JSON files on
 local disk — but the location is configurable via `DATA_DIR` specifically
@@ -185,12 +236,14 @@ day to day.
 
 ## Next steps
 
-- Swap file-based snapshot/run storage for Postgres before any real
-  deployment with concurrent access.
+- Swap file-based storage (snapshots, runs, workspaces, sessions) for
+  Postgres before any real deployment with concurrent access.
 - Decide the credential path for scheduled/unattended runs (vault vs.
-  staying user-triggered) and wire it into `cli.ts` / `routes/runs.ts`.
+  staying user-triggered) — still open, discussed but not built.
 - Expand `engine/collectors/registry.ts` scope (identity profiles,
   transforms, certifications, SoD violations, etc.) as needed.
-- Add auth to the dashboard itself before deploying anywhere shared —
-  right now anyone who can reach the app can trigger a run with whatever
-  credentials they type in.
+- The CLI (`cli.ts`) still reads `ISC_BASE_URL`/`ISC_CLIENT_ID`/
+  `ISC_CLIENT_SECRET` from env vars independent of the workspace model —
+  it writes data that becomes visible once a matching workspace exists,
+  but doesn't go through workspace auth itself. Worth revisiting if the
+  CLI needs the same access boundaries as the web app.

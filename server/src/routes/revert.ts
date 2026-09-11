@@ -4,7 +4,9 @@ import { fetchOne, patchOne } from "../engine/iscClient.js";
 import { RESOURCE_BASE_PATH } from "../engine/collectors/registry.js";
 import { getSnapshotAt } from "../engine/snapshotStore.js";
 import { getRun, recordRevert } from "../engine/runStore.js";
+import { getWorkspace } from "../auth/workspaceStore.js";
 import { buildRevertPlan, findDrift } from "../engine/revert/buildRevertPlan.js";
+import "../auth/session.js";
 import type { ObjectType, TenantConnection } from "../engine/types.js";
 
 export const revertRouter = Router();
@@ -13,7 +15,6 @@ interface RevertBody {
   runId: string;
   objectType: ObjectType;
   objectId: string;
-  baseUrl: string;
   clientId: string;
   clientSecret: string;
   dryRun: boolean;
@@ -26,22 +27,27 @@ interface RevertBody {
  *
  * Body identifies the change by (runId, objectType, objectId) rather than
  * accepting field values directly from the client — the server re-derives
- * the actual before/after state from its own stored run + snapshot data,
- * so a client can't submit arbitrary values to patch that don't match what
- * was genuinely detected.
+ * the actual before/after state from its own stored run + snapshot data.
+ * baseUrl is no longer accepted from the client either — it comes from the
+ * caller's own registered workspace, same reasoning as triggering a run:
+ * there's no way to point this at a tenant other than the one you're
+ * logged into.
  */
 revertRouter.post("/", async (req, res) => {
   const body = req.body as Partial<RevertBody>;
+  const { orgName } = req.session.user!;
 
   if (!body.runId || !body.objectType || !body.objectId) {
     return res.status(400).json({ error: "runId, objectType, and objectId are required" });
   }
-  if (!body.baseUrl || !body.clientId || !body.clientSecret) {
-    return res.status(400).json({ error: "baseUrl, clientId, and clientSecret are required" });
+  if (!body.clientId || !body.clientSecret) {
+    return res.status(400).json({ error: "clientId and clientSecret are required" });
   }
 
   const run = await getRun(body.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  if (!run || run.tenant !== orgName) {
+    return res.status(404).json({ error: "Run not found" });
+  }
 
   const report = run.reports.find((r) => r.objectType === body.objectType);
   if (!report) return res.status(404).json({ error: `No ${body.objectType} report in this run` });
@@ -73,11 +79,10 @@ revertRouter.post("/", async (req, res) => {
     return res.json({ revertible: false, blockedReason: plan.blockedReason, excluded: plan.excluded });
   }
 
-  const conn: TenantConnection = {
-    baseUrl: body.baseUrl.replace(/\/$/, ""),
-    clientId: body.clientId,
-    clientSecret: body.clientSecret,
-  };
+  const workspace = await getWorkspace(orgName);
+  if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+  const conn: TenantConnection = { baseUrl: workspace.baseUrl, clientId: body.clientId, clientSecret: body.clientSecret };
   const basePath = RESOURCE_BASE_PATH[body.objectType];
 
   try {
@@ -107,7 +112,7 @@ revertRouter.post("/", async (req, res) => {
     await recordRevert(body.runId, {
       objectType: body.objectType,
       objectId: body.objectId,
-      appliedBy: (req as typeof req & { auth?: { user: string } }).auth?.user,
+      appliedBy: req.session.user!.username,
       fieldsReverted: plan.patch.map((p) => p.path.slice(1)),
       excludedFields: plan.excluded.map((e) => e.field),
     });

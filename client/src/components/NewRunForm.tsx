@@ -3,10 +3,7 @@ import { ALL_OBJECT_TYPES, OBJECT_TYPE_LABELS, type ObjectType } from "../types"
 import { triggerRun } from "../api";
 import type { RunReport } from "../types";
 
-const LAST_BASE_URL_KEY = "isc-change-intel:lastBaseUrl";
-
 export interface RunPrefill {
-  baseUrl?: string;
   scope?: ObjectType[];
   lookbackDays?: number | null;
 }
@@ -19,17 +16,7 @@ interface Props {
   prefill?: RunPrefill;
 }
 
-function loadDefaultBaseUrl(prefill?: RunPrefill): string {
-  if (prefill?.baseUrl) return prefill.baseUrl;
-  try {
-    return localStorage.getItem(LAST_BASE_URL_KEY) ?? "";
-  } catch {
-    return ""; // localStorage unavailable (e.g. private browsing) — just start blank
-  }
-}
-
 export function NewRunForm({ onRunComplete, prefill }: Props) {
-  const [baseUrl, setBaseUrl] = useState(() => loadDefaultBaseUrl(prefill));
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -50,8 +37,8 @@ export function NewRunForm({ onRunComplete, prefill }: Props) {
     e.preventDefault();
     setError(null);
 
-    if (!baseUrl || !clientId || !clientSecret) {
-      setError("Base URL, Client ID, and Client Secret are all required.");
+    if (!clientId || !clientSecret) {
+      setError("Client ID and Client Secret are both required.");
       return;
     }
     if (scope.length === 0) {
@@ -62,21 +49,12 @@ export function NewRunForm({ onRunComplete, prefill }: Props) {
     setSubmitting(true);
     try {
       const run = await triggerRun({
-        baseUrl,
         clientId,
         clientSecret,
         scope,
         lookbackDays: lookbackDays ? Number(lookbackDays) : undefined,
         name: name.trim() || undefined,
       });
-
-      // Remember the base URL for next time — it's just a hostname, not a
-      // secret. Credentials are cleared and never touch storage.
-      try {
-        localStorage.setItem(LAST_BASE_URL_KEY, baseUrl);
-      } catch {
-        // ignore — persistence is a convenience, not a requirement
-      }
       setClientId("");
       setClientSecret("");
       onRunComplete(run);
@@ -91,28 +69,13 @@ export function NewRunForm({ onRunComplete, prefill }: Props) {
     <div className="main-inner">
       <h1 className="form-title">New run</h1>
       <p className="form-subtitle">
-        Connects to your tenant, collects the selected object types, and compares against the
+        Collects the selected object types from this workspace's tenant and compares against the
         prior snapshot. Credentials are used only for this request and are never stored.
       </p>
 
       {error && <div className="form-error">{error}</div>}
 
       <form onSubmit={handleSubmit}>
-        <div className="field-group">
-          <label className="field-label" htmlFor="baseUrl">
-            Tenant base URL
-          </label>
-          <input
-            id="baseUrl"
-            className="field-input"
-            placeholder="https://your-org.api.identitynow.com"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            autoComplete="off"
-          />
-          <div className="field-hint">Remembered on this browser after your first run — edit anytime.</div>
-        </div>
-
         <div className="field-group">
           <label className="field-label" htmlFor="runName">
             Run name <span className="field-label-optional">(optional)</span>

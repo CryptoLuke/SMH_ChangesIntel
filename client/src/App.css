@@ -700,3 +700,133 @@ button {
   display: flex;
   gap: 8px;
 }
+
+/* --- Workspace gate (landing page) --- */
+
+.gate-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+}
+
+.gate-card {
+  width: 380px;
+  padding: 32px;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.gate-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.gate-subtitle {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin-bottom: 24px;
+}
+
+.gate-context {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+
+.gate-context strong {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+/* --- Workspace badge, logout, user management --- */
+
+.workspace-badge {
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+}
+
+.workspace-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.workspace-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.signed-in-as {
+  font-size: 12px;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.signed-in-as strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.logout-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  margin-left: auto;
+}
+
+.logout-link:hover {
+  color: var(--remove);
+}
+
+.role-badge-inline {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.add-user-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-user-link,
+.delete-workspace-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.add-user-link {
+  color: var(--accent);
+}
+
+.delete-workspace-link {
+  color: var(--remove);
+}

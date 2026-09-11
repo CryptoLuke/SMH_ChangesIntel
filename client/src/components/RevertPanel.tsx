@@ -2,8 +2,6 @@ import { useState } from "react";
 import { revertChange, type RevertResult } from "../api";
 import type { ObjectType } from "../types";
 
-const LAST_BASE_URL_KEY = "isc-change-intel:lastBaseUrl";
-
 interface Props {
   runId: string;
   objectType: ObjectType;
@@ -15,13 +13,6 @@ type Stage = "idle" | "form" | "preview" | "done";
 
 export function RevertPanel({ runId, objectType, objectId, onReverted }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
-  const [baseUrl, setBaseUrl] = useState(() => {
-    try {
-      return localStorage.getItem(LAST_BASE_URL_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,7 +21,7 @@ export function RevertPanel({ runId, objectType, objectId, onReverted }: Props) 
   async function runPreview(e: React.MouseEvent) {
     e.stopPropagation();
     setBusy(true);
-    const r = await revertChange({ runId, objectType, objectId, baseUrl, clientId, clientSecret, dryRun: true });
+    const r = await revertChange({ runId, objectType, objectId, clientId, clientSecret, dryRun: true });
     setResult(r);
     setBusy(false);
     setStage("preview");
@@ -39,7 +30,7 @@ export function RevertPanel({ runId, objectType, objectId, onReverted }: Props) 
   async function runApply(e: React.MouseEvent) {
     e.stopPropagation();
     setBusy(true);
-    const r = await revertChange({ runId, objectType, objectId, baseUrl, clientId, clientSecret, dryRun: false });
+    const r = await revertChange({ runId, objectType, objectId, clientId, clientSecret, dryRun: false });
     setResult(r);
     setBusy(false);
     setStage("done");
@@ -76,12 +67,6 @@ export function RevertPanel({ runId, objectType, objectId, onReverted }: Props) 
           <p className="revert-panel-hint">
             Credentials are used only for this action and are never stored. Requires admin.
           </p>
-          <input
-            className="field-input revert-input"
-            placeholder="Tenant base URL"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-          />
           <div className="two-col">
             <input
               className="field-input revert-input"
@@ -98,7 +83,7 @@ export function RevertPanel({ runId, objectType, objectId, onReverted }: Props) 
             />
           </div>
           <div className="revert-panel-actions">
-            <button className="revert-preview-button" disabled={busy || !baseUrl || !clientId || !clientSecret} onClick={runPreview}>
+            <button className="revert-preview-button" disabled={busy || !clientId || !clientSecret} onClick={runPreview}>
               {busy ? "Checking..." : "Preview"}
             </button>
             <button className="revert-cancel-button" onClick={(e) => { stop(e); setStage("idle"); }}>

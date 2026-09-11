@@ -8,8 +8,85 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// --- Workspace / session auth ---
+
+export interface WhoAmI {
+  orgName?: string;
+  username?: string;
+  role?: "admin" | "read-only";
+}
+
+export async function getWhoAmI(): Promise<WhoAmI> {
+  const res = await fetch("/api/auth/whoami", { credentials: "same-origin" });
+  const body = await handle<WhoAmI | null>(res);
+  return body ?? {};
+}
+
+export async function checkWorkspace(baseUrl: string): Promise<{ exists: boolean; orgName: string }> {
+  const res = await fetch("/api/workspaces/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ baseUrl }),
+  });
+  return handle(res);
+}
+
+export async function createWorkspace(baseUrl: string, username: string, password: string): Promise<WhoAmI> {
+  const res = await fetch("/api/workspaces", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ baseUrl, username, password }),
+  });
+  return handle(res);
+}
+
+export async function login(orgName: string, username: string, password: string): Promise<WhoAmI> {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ orgName, username, password }),
+  });
+  return handle(res);
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+}
+
+export interface WorkspaceUserSummary {
+  username: string;
+  role: "admin" | "read-only";
+  createdAt: string;
+}
+
+export async function listWorkspaceUsers(): Promise<WorkspaceUserSummary[]> {
+  const res = await fetch("/api/workspaces/users", { credentials: "same-origin" });
+  return handle(res);
+}
+
+export async function addWorkspaceUser(username: string, password: string, role: "admin" | "read-only"): Promise<void> {
+  const res = await fetch("/api/workspaces/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ username, password, role }),
+  });
+  await handle(res);
+}
+
+/** Deletes the caller's own workspace entirely — runs, snapshots, users,
+ *  the workspace registration itself. No parameter: always your own. */
+export async function deleteWorkspace(): Promise<{ deletedRunCount: number }> {
+  const res = await fetch("/api/workspaces", { method: "DELETE", credentials: "same-origin" });
+  return handle(res);
+}
+
+// --- Runs ---
+
 export interface TriggerRunInput {
-  baseUrl: string;
   clientId: string;
   clientSecret: string;
   scope: ObjectType[];
@@ -21,37 +98,34 @@ export interface TriggerRunInput {
  * Credentials passed here go straight into the POST body and are held by
  * the browser only for the duration of this call — nothing in this module
  * stores them, and the caller is responsible for clearing its own form
- * state after the request resolves.
+ * state after the request resolves. baseUrl is no longer part of this —
+ * the server derives it from your logged-in workspace.
  */
 export async function triggerRun(input: TriggerRunInput): Promise<RunReport> {
   const res = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(input),
   });
   return handle<RunReport>(res);
 }
 
-export async function listRuns(tenant?: string): Promise<RunSummary[]> {
-  const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
-  const res = await fetch(`/api/runs${qs}`);
+export async function listRuns(): Promise<RunSummary[]> {
+  const res = await fetch("/api/runs", { credentials: "same-origin" });
   return handle<RunSummary[]>(res);
 }
 
 export async function getRun(id: string): Promise<RunReport> {
-  const res = await fetch(`/api/runs/${id}`);
+  const res = await fetch(`/api/runs/${id}`, { credentials: "same-origin" });
   return handle<RunReport>(res);
-}
-
-export async function listTenants(): Promise<string[]> {
-  const res = await fetch("/api/runs/tenants");
-  return handle<string[]>(res);
 }
 
 export async function renameRun(id: string, name: string): Promise<RunReport> {
   const res = await fetch(`/api/runs/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ name }),
   });
   return handle<RunReport>(res);
@@ -60,27 +134,14 @@ export async function renameRun(id: string, name: string): Promise<RunReport> {
 /** DELETE returns 204 No Content on success — no body to parse, unlike
  *  every other endpoint here, so this doesn't go through handle(). */
 export async function deleteRun(id: string): Promise<void> {
-  const res = await fetch(`/api/runs/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/runs/${id}`, { method: "DELETE", credentials: "same-origin" });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(body.error ?? `Request failed (${res.status})`);
   }
 }
 
-export async function deleteTenant(tenant: string): Promise<{ deletedRunCount: number }> {
-  const res = await fetch(`/api/runs/tenants/${encodeURIComponent(tenant)}`, { method: "DELETE" });
-  return handle<{ deletedRunCount: number }>(res);
-}
-
-export interface WhoAmI {
-  username?: string;
-  role?: "admin" | "read-only";
-}
-
-export async function getWhoAmI(): Promise<WhoAmI> {
-  const res = await fetch("/api/whoami");
-  return handle<WhoAmI>(res);
-}
+// --- Revert ---
 
 export interface RevertRequestPreview {
   method: "PATCH";
@@ -104,7 +165,6 @@ export interface RevertInput {
   runId: string;
   objectType: ObjectType;
   objectId: string;
-  baseUrl: string;
   clientId: string;
   clientSecret: string;
   dryRun: boolean;
@@ -115,11 +175,14 @@ export interface RevertInput {
  * "blocked" response both carry structured detail (drifted fields,
  * exclusion reasons) the UI needs to show, not just a flat error string.
  * Credentials here are used only for this one request, same as triggerRun.
+ * baseUrl is no longer part of the input — derived server-side, same
+ * reasoning as triggerRun.
  */
 export async function revertChange(input: RevertInput): Promise<RevertResult> {
   const res = await fetch("/api/revert", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(input),
   });
   const body = await res.json().catch(() => ({}));

@@ -3,17 +3,19 @@ import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { NewRunForm, type RunPrefill } from "./components/NewRunForm";
 import { RunDetail } from "./components/RunDetail";
-import { listRuns, getRun, renameRun, getWhoAmI, deleteRun, deleteTenant, type WhoAmI } from "./api";
+import { WorkspaceGate } from "./components/WorkspaceGate";
+import { listRuns, getRun, renameRun, getWhoAmI, deleteRun, deleteWorkspace, logout, type WhoAmI } from "./api";
 import type { RunReport, RunSummary } from "./types";
 
 type View = { kind: "new-run" } | { kind: "run"; runId: string };
+type AuthState = { kind: "loading" } | { kind: "logged-out" } | { kind: "logged-in"; user: WhoAmI };
 
 export default function App() {
+  const [auth, setAuth] = useState<AuthState>({ kind: "loading" });
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "new-run" });
   const [selectedRun, setSelectedRun] = useState<RunReport | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [whoAmI, setWhoAmI] = useState<WhoAmI>({});
   // Set only when jumping to "New run" via "Repeat this run" — cleared once
   // consumed so a manual "+ New run" click afterwards starts from a blank form.
   const [prefill, setPrefill] = useState<RunPrefill | undefined>(undefined);
@@ -31,20 +33,20 @@ export default function App() {
   }
 
   useEffect(() => {
-    refreshRuns().then((data) => {
-      if (data.length > 0) {
-        setView({ kind: "run", runId: data[0].id });
-      }
+    getWhoAmI().then((user) => {
+      setAuth(user.orgName ? { kind: "logged-in", user } : { kind: "logged-out" });
     });
-    getWhoAmI()
-      .then(setWhoAmI)
-      .catch(() => {
-        // Non-fatal — the app still works without a displayed username;
-        // this just means the sidebar won't show who's signed in.
-      });
   }, []);
 
   useEffect(() => {
+    if (auth.kind !== "logged-in") return;
+    refreshRuns().then((data) => {
+      if (data.length > 0) setView({ kind: "run", runId: data[0].id });
+    });
+  }, [auth.kind]);
+
+  useEffect(() => {
+    if (auth.kind !== "logged-in") return;
     if (view.kind === "run") {
       getRun(view.runId)
         .then(setSelectedRun)
@@ -52,7 +54,19 @@ export default function App() {
     } else {
       setSelectedRun(null);
     }
-  }, [view]);
+  }, [view, auth.kind]);
+
+  function handleLoggedIn(user: WhoAmI) {
+    setAuth({ kind: "logged-in", user });
+  }
+
+  async function handleLogout() {
+    await logout();
+    setAuth({ kind: "logged-out" });
+    setRuns([]);
+    setSelectedRun(null);
+    setView({ kind: "new-run" });
+  }
 
   async function handleRunComplete(run: RunReport) {
     await refreshRuns();
@@ -66,7 +80,7 @@ export default function App() {
   }
 
   function handleRepeatRun(run: RunReport) {
-    setPrefill({ baseUrl: run.baseUrl, scope: run.scope, lookbackDays: run.lookbackDays });
+    setPrefill({ scope: run.scope, lookbackDays: run.lookbackDays });
     setFormKey((k) => k + 1);
     setView({ kind: "new-run" });
   }
@@ -108,18 +122,26 @@ export default function App() {
     }
   }
 
-  async function handleDeleteTenant(tenant: string) {
+  async function handleDeleteWorkspace() {
     try {
-      await deleteTenant(tenant);
-      const data = await refreshRuns();
-      // If the run we were viewing belonged to the now-deleted tenant, move on.
-      if (view.kind === "run" && !data.some((r) => r.id === view.runId)) {
-        if (data.length > 0) setView({ kind: "run", runId: data[0].id });
-        else handleNewRun();
-      }
+      await deleteWorkspace();
+      // The server destroys the session as part of this — nothing left to
+      // be logged into.
+      setAuth({ kind: "logged-out" });
+      setRuns([]);
+      setSelectedRun(null);
+      setView({ kind: "new-run" });
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to delete tenant");
+      setLoadError(err instanceof Error ? err.message : "Failed to delete workspace");
     }
+  }
+
+  if (auth.kind === "loading") {
+    return <div className="gate-page" />;
+  }
+
+  if (auth.kind === "logged-out") {
+    return <WorkspaceGate onLoggedIn={handleLoggedIn} />;
   }
 
   return (
@@ -131,8 +153,9 @@ export default function App() {
         onNewRun={handleNewRun}
         onRenameRun={handleRenameRun}
         onDeleteRun={handleDeleteRun}
-        onDeleteTenant={handleDeleteTenant}
-        whoAmI={whoAmI}
+        onDeleteWorkspace={handleDeleteWorkspace}
+        onLogout={handleLogout}
+        whoAmI={auth.user}
       />
       <main className="main">
         {loadError && <div className="form-error">{loadError}</div>}
@@ -147,7 +170,7 @@ export default function App() {
               onRepeat={handleRepeatRun}
               onRename={handleRenameRun}
               onReverted={handleReverted}
-              whoAmI={whoAmI}
+              whoAmI={auth.user}
             />
           ) : (
             <div className="main-inner empty-state">Loading run...</div>

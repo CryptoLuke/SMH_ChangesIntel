@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RunSummary } from "../types";
 import type { WhoAmI } from "../api";
-import { PencilIcon, TrashIcon } from "./icons";
+import { ManageUsersPanel } from "./ManageUsersPanel";
 
 interface Props {
   runs: RunSummary[];
@@ -10,7 +10,8 @@ interface Props {
   onNewRun: () => void;
   onRenameRun: (id: string, name: string) => void;
   onDeleteRun: (id: string) => void;
-  onDeleteTenant: (tenant: string) => void;
+  onDeleteWorkspace: () => void;
+  onLogout: () => void;
   whoAmI: WhoAmI;
 }
 
@@ -31,17 +32,17 @@ export function Sidebar({
   onNewRun,
   onRenameRun,
   onDeleteRun,
-  onDeleteTenant,
+  onDeleteWorkspace,
+  onLogout,
   whoAmI,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const [deletingTenant, setDeletingTenant] = useState<string | null>(null);
-  const [tenantConfirmText, setTenantConfirmText] = useState("");
+  const [confirmingWorkspaceDelete, setConfirmingWorkspaceDelete] = useState(false);
+  const [workspaceConfirmText, setWorkspaceConfirmText] = useState("");
 
   const isAdmin = whoAmI.role === "admin";
-  const tenants = [...new Set(runs.map((r) => r.tenant))].sort();
 
   function startEditing(run: RunSummary, e: React.MouseEvent) {
     e.stopPropagation();
@@ -61,10 +62,20 @@ export function Sidebar({
         <span>Identity Security Cloud</span>
       </div>
 
+      {whoAmI.orgName && (
+        <div className="workspace-badge">
+          <div className="workspace-label">Tenant workspace</div>
+          <div className="workspace-name">{whoAmI.orgName}</div>
+        </div>
+      )}
+
       {whoAmI.username && (
         <div className="signed-in-as">
           Signed in as <strong>{whoAmI.username}</strong>
           {whoAmI.role === "read-only" && <span className="role-badge">read-only</span>}
+          <button className="logout-link" onClick={onLogout}>
+            Log out
+          </button>
         </div>
       )}
 
@@ -123,7 +134,7 @@ export function Sidebar({
                     />
                   ) : (
                     <div className="run-history-item-top">
-                      <span className="tenant">{run.name || run.tenant}</span>
+                      <span className="tenant">{run.name || formatTimestamp(run.startedAt)}</span>
                       <span className="run-item-icons">
                         <button
                           className="rename-icon-button"
@@ -131,7 +142,7 @@ export function Sidebar({
                           title="Rename this run"
                           aria-label="Rename this run"
                         >
-                          <PencilIcon />
+                          ✎
                         </button>
                         {isAdmin && (
                           <button
@@ -143,7 +154,7 @@ export function Sidebar({
                             title="Delete this run"
                             aria-label="Delete this run"
                           >
-                            <TrashIcon />
+                            🗑
                           </button>
                         )}
                       </span>
@@ -151,7 +162,6 @@ export function Sidebar({
                   )}
                   {!isConfirmingDelete && (
                     <span className="meta">
-                      {run.name ? `${run.tenant} · ` : ""}
                       {formatTimestamp(run.startedAt)} · {run.totalChanges} change
                       {run.totalChanges === 1 ? "" : "s"}
                       {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
@@ -164,65 +174,54 @@ export function Sidebar({
         )}
       </div>
 
-      {isAdmin && tenants.length > 0 && (
-        <div>
-          <div className="run-history-label">Manage tenants</div>
-          <div className="tenant-manage-list">
-            {tenants.map((tenant) => (
-              <div key={tenant} className="tenant-manage-item">
-                {deletingTenant === tenant ? (
-                  <div className="tenant-delete-confirm">
-                    <div className="tenant-delete-warning">
-                      This permanently deletes every run and all snapshot history for <strong>{tenant}</strong>. Type the
-                      tenant name to confirm:
-                    </div>
-                    <input
-                      className="run-rename-input"
-                      value={tenantConfirmText}
-                      autoFocus
-                      onChange={(e) => setTenantConfirmText(e.target.value)}
-                      placeholder={tenant}
-                    />
-                    <div className="tenant-delete-actions">
-                      <button
-                        className="delete-confirm-yes"
-                        disabled={tenantConfirmText !== tenant}
-                        onClick={() => {
-                          onDeleteTenant(tenant);
-                          setDeletingTenant(null);
-                          setTenantConfirmText("");
-                        }}
-                      >
-                        Delete permanently
-                      </button>
-                      <button
-                        className="delete-confirm-no"
-                        onClick={() => {
-                          setDeletingTenant(null);
-                          setTenantConfirmText("");
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <span className="tenant-manage-name">{tenant}</span>
-                    <button
-                      className="rename-icon-button delete-icon-button"
-                      onClick={() => setDeletingTenant(tenant)}
-                      title={`Delete all data for ${tenant}`}
-                      aria-label={`Delete all data for ${tenant}`}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </>
-                )}
+      {isAdmin && (
+        <>
+          <ManageUsersPanel />
+
+          <div>
+            <div className="run-history-label">Danger zone</div>
+            {confirmingWorkspaceDelete ? (
+              <div className="tenant-delete-confirm">
+                <div className="tenant-delete-warning">
+                  This permanently deletes every run, every snapshot, and every user for this
+                  workspace. Type the workspace name (<strong>{whoAmI.orgName}</strong>) to confirm:
+                </div>
+                <input
+                  className="run-rename-input"
+                  value={workspaceConfirmText}
+                  onChange={(e) => setWorkspaceConfirmText(e.target.value)}
+                  placeholder={whoAmI.orgName}
+                />
+                <div className="tenant-delete-actions">
+                  <button
+                    className="delete-confirm-yes"
+                    disabled={workspaceConfirmText !== whoAmI.orgName}
+                    onClick={() => {
+                      onDeleteWorkspace();
+                      setConfirmingWorkspaceDelete(false);
+                      setWorkspaceConfirmText("");
+                    }}
+                  >
+                    Delete permanently
+                  </button>
+                  <button
+                    className="delete-confirm-no"
+                    onClick={() => {
+                      setConfirmingWorkspaceDelete(false);
+                      setWorkspaceConfirmText("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            ))}
+            ) : (
+              <button className="delete-workspace-link" onClick={() => setConfirmingWorkspaceDelete(true)}>
+                Delete this workspace
+              </button>
+            )}
           </div>
-        </div>
+        </>
       )}
     </aside>
   );
