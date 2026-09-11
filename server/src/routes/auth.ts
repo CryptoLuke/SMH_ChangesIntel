@@ -5,6 +5,7 @@ import {
   createWorkspace,
   verifyWorkspaceLogin,
   addWorkspaceUser,
+  removeWorkspaceUser,
   listWorkspaceUsers,
   deleteWorkspace,
 } from "../auth/workspaceStore.js";
@@ -108,6 +109,26 @@ authRouter.get("/workspaces/users", requireRole("admin"), async (req, res) => {
   const orgName = req.session.user!.orgName;
   const users = await listWorkspaceUsers(orgName);
   res.json(users.map((u) => ({ username: u.username, role: u.role, createdAt: u.createdAt })));
+});
+
+/**
+ * Admin-only, scoped to the caller's own workspace only (same pattern as
+ * adding a user — no orgName parameter, so there's no way to remove a user
+ * from a different workspace). Refuses to remove the last admin — see
+ * workspaceStore.removeWorkspaceUser. If admins remove their own account,
+ * their session is destroyed too, since it would otherwise keep working
+ * against an account that no longer exists.
+ */
+authRouter.delete("/workspaces/users/:username", requireRole("admin"), async (req, res) => {
+  const orgName = req.session.user!.orgName;
+  const callerUsername = req.session.user!.username;
+  const result = await removeWorkspaceUser(orgName, req.params.username);
+  if ("error" in result) return res.status(400).json({ error: result.error });
+
+  if (req.params.username === callerUsername) {
+    return req.session.destroy(() => res.status(204).end());
+  }
+  res.status(204).end();
 });
 
 /**

@@ -114,6 +114,17 @@ export async function addWorkspaceUser(username: string, password: string, role:
   await handle(res);
 }
 
+export async function removeWorkspaceUser(username: string): Promise<void> {
+  const res = await fetch(`/api/workspaces/users/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error ?? `Request failed (${res.status})`);
+  }
+}
+
 /** Deletes the caller's own workspace entirely — runs, snapshots, users,
  *  the workspace registration itself. No parameter: always your own. */
 export async function deleteWorkspace(): Promise<{ deletedRunCount: number }> {
@@ -176,6 +187,35 @@ export async function deleteRun(id: string): Promise<void> {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(body.error ?? `Request failed (${res.status})`);
   }
+}
+
+export interface ActorLookupInput {
+  runId: string;
+  objectType: ObjectType;
+  objectId: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export type ActorLookupResult =
+  | { kind: "found"; actorName: string; eventName: string; createdAt: string }
+  | { kind: "not-found" }
+  | { kind: "error"; message: string };
+
+/** Read-only against ISC — no dryRun/apply distinction needed, unlike
+ *  revert. Available to both roles, same as triggering a run. */
+export async function lookupActor(input: ActorLookupInput): Promise<ActorLookupResult> {
+  const { runId, ...body } = input;
+  const res = await fetch(`/api/runs/${runId}/actor`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) return { kind: "error", message: json.error ?? `Request failed (${res.status})` };
+  if (!json.found) return { kind: "not-found" };
+  return { kind: "found", actorName: json.actorName, eventName: json.eventName, createdAt: json.createdAt };
 }
 
 // --- Revert ---

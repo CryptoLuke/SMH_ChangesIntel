@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ChangeRecord, RunReport } from "../types";
 import { OBJECT_TYPE_LABELS } from "../types";
 import { RevertPanel } from "./RevertPanel";
+import { ActorLookupPanel } from "./ActorLookupPanel";
 import { PencilIcon } from "./icons";
 import type { WhoAmI } from "../api";
 
@@ -40,6 +41,10 @@ function ChangeRow({
   const [expanded, setExpanded] = useState(false);
   const hasFields = change.changedFields && change.changedFields.length > 0;
   const revertEligible = canRevert && change.changeType === "modified" && change.objectType !== "identities";
+  // Available to both roles (read-only against ISC) and every change type,
+  // unlike revert — but still not for identities, same reasoning as revert:
+  // identity changes come from aggregation, not a specific ISC user action.
+  const actorLookupEligible = change.objectType !== "identities";
 
   return (
     <div className={`change-row ${change.changeType}`} onClick={() => hasFields && setExpanded((e) => !e)}>
@@ -48,6 +53,7 @@ function ChangeRow({
         <span className="change-name">{change.name ?? change.id}</span>
         {change.secondaryName && <span className="change-username">@{change.secondaryName}</span>}
         <span className="change-id">{change.id}</span>
+
       </div>
       {expanded && hasFields && (
         <ul className="field-diff-list">
@@ -60,14 +66,19 @@ function ChangeRow({
           ))}
         </ul>
       )}
-      {revertEligible && (
-        <RevertPanel
-          runId={runId}
-          objectType={change.objectType}
-          objectId={change.id}
-          onReverted={onReverted}
-        />
-      )}
+      <div className="change-row-actions">
+        {actorLookupEligible && (
+          <ActorLookupPanel runId={runId} objectType={change.objectType} objectId={change.id} />
+        )}
+        {revertEligible && (
+          <RevertPanel
+            runId={runId}
+            objectType={change.objectType}
+            objectId={change.id}
+            onReverted={onReverted}
+          />
+        )}
+      </div>
     </div>
   );
 }

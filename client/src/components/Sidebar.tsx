@@ -176,7 +176,7 @@ export function Sidebar({
 
       {isAdmin && (
         <>
-          <ManageUsersPanel />
+          <ManageUsersPanel currentUsername={whoAmI.username} />
 
           <div>
             <div className="run-history-label">Danger zone</div>

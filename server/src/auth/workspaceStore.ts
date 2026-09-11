@@ -150,6 +150,31 @@ export async function addWorkspaceUser(
   return { ok: true };
 }
 
+/**
+ * Removes a user from a workspace. Refuses to remove the workspace's last
+ * admin — that would permanently lock everyone out of admin-only actions
+ * (adding users, deleting the workspace) with no way back short of the
+ * owner... who has no workspace-management access by design. Better to
+ * block it here than create an unrecoverable state.
+ */
+export async function removeWorkspaceUser(
+  orgName: string,
+  username: string
+): Promise<{ ok: true } | { error: string }> {
+  const users = await listWorkspaceUsers(orgName);
+  const target = users.find((u) => u.username === username);
+  if (!target) return { error: `"${username}" is not a user in this workspace.` };
+
+  const remainingAdmins = users.filter((u) => u.role === "admin" && u.username !== username);
+  if (target.role === "admin" && remainingAdmins.length === 0) {
+    return { error: "Can't remove the last admin — the workspace would have no one able to manage it." };
+  }
+
+  const updated = users.filter((u) => u.username !== username);
+  await writeFile(path.join(workspaceDir(orgName), "users.json"), JSON.stringify(updated, null, 2), "utf-8");
+  return { ok: true };
+}
+
 export async function verifyWorkspaceLogin(
   orgName: string,
   username: string,
